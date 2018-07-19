@@ -43,7 +43,7 @@
 	(fn (f)
 		(prn (f t))
 		(prn (f nil)))
-	(fn (x)							#****THIS x FAILS TO MASK THE GLOBAL x ASSIGNED IN Test 6!!! ENVIRONMENTS ARE STILL FUCKED!
+	(fn (x)
 		(ccc (fn (return)
 			(branch x
 				(return 5))

@@ -9,6 +9,17 @@
 (mac _let (s v . body)
 	`((fn (,s) ;body) ,v))
 
+
+#ELEMENTARY LIST STUFF
+(def no (x) (== x nil))				#Following my usual convention, this should be called nil?. But no is really nice.
+
+(def caar (l) (car (car l)))
+(def cadr (l) (car (cdr l)))
+(def cdar (l) (cdr (car l)))
+(def cddr (l) (cdr (cdr l)))
+
+
+
 (mac if args
 	(branch args
 		(branch (cdr args)
@@ -24,15 +35,6 @@
 						,temp))))
 		nil))
 #And now we never have to write out branch again.
-
-
-#ELEMENTARY LIST STUFF
-(def no (x) (== x nil))				#Following my usual convention, this should be called nil?. But no is really nice.
-
-(def caar (l) (car (car l)))
-(def cadr (l) (car (cdr l)))
-(def cdar (l) (cdr (car l)))
-(def cddr (l) (cdr (cdr l)))
 
 
 (def map1 (f l)
@@ -69,22 +71,26 @@
 #stages. In other words, it's a nested _with without having to write with or 
 #let multiple times.
 (mac let xprs
-	(if (cons? (car xprs))
+	(if 
+		(no (car xprs))
+		`(do ;(cdr xprs))
+		
+		(cons? (car xprs))
 		(if (cons? (caar xprs))
-			`(_with ,(caar xprs) (_with ;(cdar xprs) ;(cdr xprs)))
+			`(_with ,(caar xprs) (let ;(cdar xprs) ;(cdr xprs)))
 			`(_with ;xprs))
+		
 		`(_with (,(car xprs) ,(cadr xprs)) ;(cddr xprs))))
-
-(mac _wuq (syms . body)
-	`(
-		(fn ,syms ;body)
-		;(map1 (fn (x) ~(uniq)) syms)))
 
 #Short for let-unique. First arg is a symbol or a list of symbols.
 (mac luq xprs
 	(if (cons? (car xprs))
-		`(_wuq ;xprs)
-		`(_wuq (,(car xprs)) ;(cdr xprs))))
+		`(
+			(fn ,(car xprs) ;(cdr xprs))
+			;(map1 (fn (temp) ~(uniq)) (car xprs)))
+		`(
+			(fn (,(car xprs)) ;(cdr xprs))
+			(uniq))))
 
 (mac iflet (s v . rest)
 	`(let ,s ,v (if ,s ;rest)))
@@ -157,6 +163,17 @@
 				(,~,new ,(cddr args) ;body))
 			`(do ;body))))
 
+#This is getting ridiculous!
+(mac pluralize3 (old new)
+	`(mac ,new (args . body)
+		(if args
+			`(,~,old ,(car args) ,(cadr args) ,(car (cddr args))
+				(,~,new ,(cdr (cddr args)) ;body))
+			`(do ;body))))
+
+#Now I need to write a macro to generate these....
+
+
 
 
 
@@ -183,16 +200,47 @@
 
 
 
-#NAUGHTY LIST STUFF
-(def reverse (c)
-	(let ret nil
-		(while c (push! (pop! c) ret))
-		ret))
+#ITERATION ON CONTAINERS
 
-(def count (c (n . 0))
-	(if c
-		(count (cdr c) (+ n 1))
-		n))
+(assign iterators {
+	~sym (fn (s break)			#This is so that the empty list can be iterated over.
+		(fn ((value . nil)) (break value)))
+	~cons (fn (s break)
+		(fn ((value . nil))
+			(if s
+				(pop! s)
+				(break value))))
+	~array (fn (s break)
+		(let i 0 (fn ((value . nil))
+			(if (>= i (s))
+				(break value))
+			(let ret (s i)
+				(++ i)
+				ret))))
+})
+
+(def iterator (s break)
+	((iterators (type? s)) s break))
+
+(iterators ~hash (fn (s break)
+	(iterator (items s) break)))
+
+
+
+#NAUGHTY LIST STUFF
+#I think this stuff is unnecessary. Use arrays for anything you would want to 
+#do this with. If you really need an array to be backwards, use (a [t t -1]).
+
+
+# (def reverse (c)
+	# (let ret nil
+		# (while c (push! (pop! c) ret))
+		# ret))
+
+# (def count (c (n . 0))
+	# (if c
+		# (count (cdr c) (+ n 1))
+		# n))
 
 
 #CONTROL STUFF
@@ -206,16 +254,18 @@
 
 (mac while (cond . body)
 	(luq temp
-		`((rfn ,temp ()
-			(when ,cond
-				;body
-				(,temp))))))
+		`(
+			(rfn ,temp ()
+				(when ,cond
+					;body
+					(,temp))))))
 
 (mac dowhile (cond . body)
 	(luq temp
-		`((rfn ,temp ()
-			;body
-			(if ,cond (,temp))))))
+		`(
+			(rfn ,temp ()
+				;body
+				(if ,cond (,temp))))))
 
 #A dowhile that captures the value of the (last expression of the) body. The 
 #given symbol x is bound to that value for the evaluation of the condition. 
@@ -223,11 +273,16 @@
 #rejection method randomization.)
 (mac xwhile (x cond . body)
 	(luq temp
-		`((rfn ,temp ()
-			(let ,x (do ;body)
-				(if ,cond
-					(,temp)
-					,x))))))
+		`(
+			(rfn ,temp ()
+				(let ,x (do ;body)
+					(if ,cond
+						(,temp)
+						,x))))))
+
+
+
+
 
 #This stores fns in a literal hash, rather than the horror of if elif elif 
 #elif ... else. So all cases take the same (short) amount of time to run.
@@ -275,84 +330,30 @@
 
 
 
-#Specific Available, General Default
-#SAGD is an approach to making things efficient (he says, while creating a 
-#Lisp interpreter in Python :D ). The idea is that the language should 
-#provide general functions that accept arguments of any type, and also 
-#functions that accept only arguments of specific types that are faster. You 
-#can code up a storm using the general functions, and then optimize later by 
-#using the specific functions.
 
-#Here's an example of how this might work. We are concerned with cons lists 
-#and arrays. Many operations (like mapping and counting) are logically 
-#equivalent on the two types, but completely different in terms of 
-#implementation. We will create three versions of the function each: each 
-#(which is general), ceach (which only works on cons lists) and aeach (which 
-#only works on arrays). To allow this process to be generalized to other 
-#sequence concepts, we will create helpful macros.
+(mac each (x seq . body)
+	(luq (it return _seq)
+		`(let ,_seq ,seq
+			(wcc ,return
+				(let ,it (iterator ,_seq ,return)
+					(while t
+						(let ,x (,it)
+							;body)))))))
 
-#The *-seq-* macros below work on macros of the form (mac name (... sequence . 
-#body) ...). They perform the work of a) wrapping macro bodies in luq-let 
-#expressions to ensure that the sequence is only evaluated once, b) creating 
-#the type checks in the general version of the macro and c) wrapping only as 
-#needed.
+(pluralize2 each eachs)
 
-(mac wrap-seq (old new extra-parms)
-	`(mac ,new (;extra-parms seq . body)
-		(luq _seq
-			`(let ,_seq ,seq
-				(,~,old ;(list ;extra-parms) ,_seq ;body)))))
+(mac eachpair (x y seq . body)
+	(luq (it return _seq)
+		`(let ,_seq ,seq
+			(if
+				(wcc ,return
+					(let ,it (iterator ,_seq ,return)
+						(while t
+							(let (,x (,it nil) ,y (,it t))
+								;body))))
+				(prn 'WARNING: eachpair invoked on a sequence with an odd number of elements.')))))
 
-(mac wrap-seq-case (name _cname _aname extra-parms)
-	`(mac ,name (;extra-parms seq . body)
-		(luq _seq
-			`(let ,_seq ,seq
-				(typecase ,_seq
-					~cons (,~,_cname ;(list ;extra-parms) ,_seq ;body)
-					~array (,~,_aname ;(list ;extra-parms) ,_seq ;body))))))
-
-(mac make-seq-macs (_cname cname _aname aname name extra-parms)
-	`(do
-		(wrap-seq ,_cname ,cname ,extra-parms)
-		(wrap-seq ,_aname ,aname ,extra-parms)
-		(wrap-seq-case ,name ,_cname ,_aname ,extra-parms)))
-
-#The two core macros, which implement the guts of the "each" algorithm for the 
-#two sequence types. Their names begin with _ because they're not intended to 
-#be used directly (except perhaps in expander code for other macros that futher 
-#eloborate on the concept of "each").
-
-(mac _ceach (x l . body)
-	`(while ,l
-		(let ,x (pop! ,l) ;body)))
-
-(mac _aeach (x a . body)
-	(luq i
-		`(for ,i (,a)
-			(let ,x (,a ,i) ;body))))
-
-#And now we make the real macros.
-(make-seq-macs _ceach ceach _aeach aeach each (x))
-
-#And similarly for "eachpair".
-
-(mac _ceachpair (x y l . body)
-	`(while ,l
-		(let (,x (pop! ,l) ,y (pop! ,l)) ;body)))
-
-(mac _aeachpair (x y a . body)
-	(luq i
-		`(for ,i [0 (,a) 2]
-			(let
-				(
-					,x (,a ,i)
-					,y (,a (+ ,i 1)))
-				;body))))
-
-(make-seq-macs _ceachpair ceachpair _aeachpair aeachpair eachpair (x y))
-
-#Note: The iterator mechanism may be a better way of doing this.
-
+(pluralize3 eachpair eachpairs)
 
 
 
@@ -403,43 +404,15 @@
 
 (def ajoin args
 	(let ret[]
-		(ceach arg args
+		(each arg args
 			(each sub arg
 				(ret nil sub)))
 		ret))
-
-(def cjoin args
-	(let ret nil
-		(ceach arg args
-			(each sub arg
-				(push! sub ret)))
-		(reverse ret)))
 
 
 
 
 #MAPPING
-
-(= iterators {
-	~sym (fn (s break value)			#This is so that the empty list can be iterated over.
-		(fn () (break value)))
-	~cons (fn (s break value)
-		(fn ()
-			(if s
-				(pop! s)
-				(break value))))
-	~array (fn (s break value)
-		(let i 0 (fn ()
-			(if (>= i (s))
-				(break value))
-			(let ret (s i)
-				(++ i)
-				ret))))
-})
-
-(def iterator (s break (value . nil))
-	((iterators (type? s)) s break value))
-
 
 (def _map (f finish args groups)
 	(if groups
@@ -489,7 +462,7 @@
 		~cons (cons (rcopy (car x)) (rcopy (cdr x)))
 		~array (amap rcopy x)
 		~hash (let ret {}
-			(aeach pair (items x)
+			(each pair (items x)
 				(ret (rcopy (car pair)) (rcopy (cdr pair))))
 			ret)
 		x))
@@ -498,11 +471,11 @@
 	(typecase x
 		~cons (cons (car x) (copy (cdr x)))
 		~array (let ret []
-			(aeach y x
+			(each y x
 				(ret nil x))
 			ret)
 		~hash (let ret {}
-			(aeach pair (items x)
+			(each pair (items x)
 				(ret (car pair) (cdr pair)))
 			ret)
 		x))
@@ -518,16 +491,9 @@
 			(dict (pop! args) t))
 			`(if (,dict ,x))))
 
-(def cin (x l)
+(def in (x seq)
 	(wcc return
-		(ceach y l
-			(if (== x y)
-				(return t)))
-		nil))
-
-(def ain (x a)
-	(wcc return
-		(aeach y l
+		(each y seq
 			(if (== x y)
 				(return t)))
 		nil))
