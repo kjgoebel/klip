@@ -100,7 +100,8 @@ def c_apply(env, rest, offset, waiting, tail, qq):
 	temp = Cont(_retList, 'Dummy value. See below.')
 	ret.append(temp)
 	ret += c_xpr(env, rest.cdr.car, offset + len(ret), True, False, qq)
-	ret.append(Apply(1))
+	ret.append(Splice())
+	ret.append(Call(2))
 	temp.pos = offset + len(ret)
 	return _finish(ret, Ld(_ret), waiting, tail)
 

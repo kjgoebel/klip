@@ -118,23 +118,6 @@ class Computer(object):
 		
 		self._doCall(lf, args)
 	
-	def _apply(self, nxt):
-		argList = self.stack.pop()
-		extraArgs = self.stack[-nxt.extraArgs:]
-		del self.stack[-nxt.extraArgs:]
-		lf = self.stack.pop()
-		
-		if isa(argList, Cons):
-			args = extraArgs + unclist(argList)
-		elif isa(argList, KlipArray):
-			args = extraArgs + argList
-		elif argList == nil:
-			args = extraArgs
-		else:
-			raise ValueError('Unknown argument list type (%s)' % type(argList))
-		
-		self._doCall(lf, args)
-	
 	def _doCall(self, lf, args):
 		if callable(lf):
 			func = lf
@@ -193,7 +176,6 @@ class Computer(object):
 		LitFunc : _litFunc,
 		Cont : _cont,
 		Call : _call,
-		Apply : _apply,
 		Pop : _pop,
 		Fn : _fn,
 		Halt : _halt,

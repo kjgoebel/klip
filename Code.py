@@ -179,7 +179,6 @@ makeInstClass('Br', 'skip')
 makeInstClass('LitFunc', 'func', 'env', 'parmList', 'pos', 'stack', stack = None)		#It's just the evaluation stack! There's no control stack!
 makeInstClass('Cont', 'parmList', 'pos', 'poppage', poppage = None)
 makeInstClass('Call', 'nargs')
-makeInstClass('Apply', 'extraArgs')
 makeInstClass('Pop')
 makeInstClass('Fn', 'parmList', 'body')
 makeInstClass('Halt')
