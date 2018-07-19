@@ -119,11 +119,13 @@ In this case, the second argument is appended to the end of the array.
 Array indices can be more interesting. Klip supports negative indices, as in Python:
 
 `(a -1)` -> a[-1] (the last element in `a`)
+
 `(a -2 3)` -> a[-2] = 3
 
 Slices can also be specified by using a literal array:
 
 `(a [2 4])` -> a[2:4]
+
 `(a [2 3] ['x' 'y'])` -> a[2:4] = ['x', 'y']
 
 Missing ends of the slice are represented with t:
@@ -135,7 +137,9 @@ As in Python, slice specifiers can have length of one, two or three. The three s
 Strings can also be considered functions, similar to containers. The items contained in a string are characters, which are themselves strings of length 1, as in Python. Strings are immutable, so they don't support item assignment. They are indexed by integers starting with zero.
 
 `(s)` -> len(s)
+
 `(s 3)` -> s[3]
+
 `(s [t -1])` -> s[:-1]
 
 String formatting is accomplished by calling a string and passing `nil` for the first parameter.
