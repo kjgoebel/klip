@@ -7,29 +7,68 @@ import copy
 
 
 def wrangleArgs(env, parmList, args):
+	before = []
+	restFunc = None
+	restName = None
+	after = []
+	
 	parms = parmList
-	pos = 0
+	while True:
+		if parms == nil:
+			break
+		if isa(parms, Cons):
+			if isa(parms.car, Cons) and parms.car.cdr == nil:
+				restFunc = clist
+				restName = parms.car.car
+				parms = parms.cdr
+				break
+			if isa(parms.car, KlipArray):
+				restFunc = KlipArray
+				restName = parms.car[0]
+				parms = parms.cdr
+				break
+			before.append(parms.car)
+			parms = parms.cdr
+		elif isa(parms, Sym):
+			restFunc = clist
+			restName = parms
+			parms = nil
+			break
+		else:
+			raise MachineError('Unexpected object found in parameter list: %s. %s %s' % (parms, parmList, args))
 	
 	while True:
-		if isa(parms, Cons):
-			if pos < len(args):
-				if isa(parms.car, Cons):
-					env.setLocal(parms.car.car, args[pos])			#Default arguments don't work unless they're a literal value.
-				else:
-					env.setLocal(parms.car, args[pos])
-			elif isa(parms.car, Cons):
-				env.setLocal(parms.car.car, parms.car.cdr)
-			else:
-				raise MachineError('Missing arguments. %s %s' % (parmList, args))
-		elif parms == nil:
-			if pos < len(args):
-				raise MachineError('Too many arguments. %s %s' % (parmList, args))
-			return
-		elif isa(parms, Sym):
-			env.setLocal(parms, clist(args[pos:]))
-			return
-		
+		if parms == nil:
+			break
+		if not isa(parms, Cons):
+			raise MachineError('Improper parameter list. %s %s' % (parmList, args))
+		if not isa(parms.car, Sym):
+			raise MachineError('Only symbols may follow a rest parameter in a parameter list. %s %s' % (parmList, args))
+		after.append(parms.car)
 		parms = parms.cdr
+	
+	pos = 0
+	for parm in before:
+		if pos >= len(args):
+			if isa(parm, Cons):
+				env.setLocal(parm.car, parm.cdr.car)
+			else:
+				raise MachineError('Not enough arguments. %s %s' % (parmList, args))
+		else:
+			if isa(parm, Cons):
+				env.setLocal(parm.car, args[pos])
+			else:
+				env.setLocal(parm, args[pos])
+		pos += 1
+	
+	if not restFunc is None:
+		pos = len(args) - len(after)
+		env.setLocal(restName, restFunc(args[len(before) : pos]))
+	
+	for parm in after:
+		if pos >= len(args):
+			raise MachineError('Not enough arguments. %s %s' % (parmList, args))
+		env.setLocal(parm, args[pos])
 		pos += 1
 
 

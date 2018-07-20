@@ -2,11 +2,11 @@
 (mac do body
 	`((fn () ;body)))
 
-(mac def (name args . body)
+(mac def (name args [body])
 	`(assign ,name (fn ,args ;body)))
 
 #The _ is because _let isn't intended to be used directly. See let, below.
-(mac _let (s v . body)
+(mac _let (s v [body])
 	`((fn (,s) ;body) ,v))
 
 
@@ -50,7 +50,7 @@
 		nil))
 
 #The _ is because _with isn't supposed to be used directly. See let, below.
-(mac _with (parms . body)
+(mac _with (parms [body])
 	(_let temp (pairs parms)
 		`(
 			(fn ,(map1 car temp)
@@ -92,17 +92,17 @@
 			(fn (,(car xprs)) ;(cdr xprs))
 			(uniq))))
 
-(mac iflet (s v . rest)
+(mac iflet (s v [rest])
 	`(let ,s ,v (if ,s ;rest)))
 
-(mac when (cond . body)
+(mac when (cond [body])
 	`(if ,cond (do ;body)))
 
 (def idfn (x) x)
 
-(mac ++ (x (delta . 1))
+(mac ++ (x (delta 1))
 	`(assign ,x (+ ,x ,delta)))
-(mac -- (x (delta . 1))
+(mac -- (x (delta 1))
 	`(assign ,x (- ,x ,delta)))
 
 
@@ -140,43 +140,6 @@
 
 
 
-
-
-#PLURALIZE
-#A tool for compounding the effects of macros.
-#old is an existing macro, function or keyword that takes zero or more 
-#parameters. pluralizeN creates a macro called new which takes a parameter 
-#list and a body. The new macro peels parameters off the list N at a time 
-#and feeds them to the old macro.
-
-(mac pluralize1 (old new)
-	`(mac ,new (args . body)
-		(if args
-			`(,~,old ,(car args)
-				(,~,new ,(cdr args) ;body))
-			`(do ;body))))
-
-(mac pluralize2 (old new)
-	`(mac ,new (args . body)
-		(if args
-			`(,~,old ,(car args) ,(cadr args)
-				(,~,new ,(cddr args) ;body))
-			`(do ;body))))
-
-#This is getting ridiculous!
-(mac pluralize3 (old new)
-	`(mac ,new (args . body)
-		(if args
-			`(,~,old ,(car args) ,(cadr args) ,(car (cddr args))
-				(,~,new ,(cdr (cddr args)) ;body))
-			`(do ;body))))
-
-#Now I need to write a macro to generate these....
-
-
-
-
-
 #LIST STUFF
 (def list? (x)
 	(or (== (type? x) ~cons) (no x)))
@@ -204,14 +167,14 @@
 
 (assign iterators {
 	~sym (fn (s break)			#This is so that the empty list can be iterated over.
-		(fn ((value . nil)) (break value)))
+		(fn ((value nil)) (break value)))
 	~cons (fn (s break)
-		(fn ((value . nil))
+		(fn ((value nil))
 			(if s
 				(pop! s)
 				(break value))))
 	~array (fn (s break)
-		(let i 0 (fn ((value . nil))
+		(let i 0 (fn ((value nil))
 			(if (>= i (s))
 				(break value))
 			(let ret (s i)
@@ -245,14 +208,14 @@
 
 #CONTROL STUFF
 
-(mac rfn (name args . body)
+(mac rfn (name args [body])
 	`(let ,name nil				#This is to keep the binding of name local.
 		(assign ,name (fn ,args ;body))))
 
-(mac wcc (sym . body)
+(mac wcc (sym [body])
 	`(ccc (fn (,sym) ;body)))
 
-(mac while (cond . body)
+(mac while (cond [body])
 	(luq temp
 		`(
 			(rfn ,temp ()
@@ -260,7 +223,7 @@
 					;body
 					(,temp))))))
 
-(mac dowhile (cond . body)
+(mac dowhile (cond [body])
 	(luq temp
 		`(
 			(rfn ,temp ()
@@ -271,7 +234,7 @@
 #given symbol x is bound to that value for the evaluation of the condition. 
 #That value is returned when the condition returns false. (This is for 
 #rejection method randomization.)
-(mac xwhile (x cond . body)
+(mac xwhile (x cond [body])
 	(luq temp
 		`(
 			(rfn ,temp ()
@@ -283,23 +246,51 @@
 
 
 
+(mac each (x seq [body])
+	(luq (it return _seq)
+		`(let ,_seq ,seq
+			(wcc ,return
+				(let ,it (iterator ,_seq ,return)
+					(while t
+						(let ,x (,it)
+							;body)))))))
+
+(mac eachpair (x y seq [body])
+	(luq (it return _seq)
+		`(let ,_seq ,seq
+			(if
+				(wcc ,return
+					(let ,it (iterator ,_seq ,return)
+						(while t
+							(let (,x (,it nil) ,y (,it t))
+								;body))))
+				(prn 'WARNING: eachpair invoked on a sequence with an odd number of elements.')))))
+
+
+
+
+
+(def even? (n)
+	(if (== 0 (band n 1))))
+
+(def odd? (n)
+	(if (!= 0 (band n 1))))
+
+
 
 #This stores fns in a literal hash, rather than the horror of if elif elif 
 #elif ... else. So all cases take the same (short) amount of time to run.
-(mac case (var . rest)
+(mac case (var [rest])
 	(luq choice
-		(let (xpdict {} default nil)
-			(while rest
-				(let temp (pop! rest)
-					(if rest
-						(xpdict temp `(fn () ,(pop! rest)))
-						(assign default temp))))
+		(let (xpdict {} default (if (odd? (rest)) (rest -1 nil) nil))
+			(eachpair val result rest
+				(xpdict val `(fn () ,result)))
 			`(let ,choice (,xpdict ,var)
 				(if ,choice
 					(,choice)
 					,default)))))
 
-(mac typecase (var . rest)
+(mac typecase (var [rest])
 	`(case (type? ,var) ;rest))
 
 #Now this is a real loop macro. Accepts both (for <symbol> <evaluates to 
@@ -308,7 +299,7 @@
 #(for i [3] ...) -> 0, 1, 2
 #(for i [1 3] ...) -> 1, 2
 #(for i [1 10 2] ...) -> 1, 3, 5, 7, 9
-(mac for (i r . body)
+(mac for (i r [body])
 	(if (== (type? r) ~array)
 		(let forfunc
 			(fn (i start stop step body)
@@ -326,53 +317,54 @@
 				3 (forfunc i (r 0) (r 1) (r 2) body)))
 		`(for ,i [,r] ;body)))
 
-(pluralize2 for fors)
+#PLURALIZE
+#A tool for compounding the effects of macros.
+#old is an existing macro, function or keyword that takes zero or more 
+#parameters. pluralize n creates a macro called new which takes a parameter 
+#array and a body. The new macro peels parameters off the array n at a time 
+#and feeds them to the old macro. The invocations of the old macro are nested, 
+#so the eachs macro (below) treats each sequence as a dimension.
+#(eaches [i [1 2] j [3 4]] (prn i j))
+#print out
+#1 3
+#1 4
+#2 3
+#2 4
 
 
+(mac pluralize (n old new)
+	(let old-args []
+		(for i n
+			(old-args nil (list ~args i)))
+		`(mac ,new (args [body])
+			(if (!= 0 (args))					#This right here? This is why we need consless lisp with no nil and empty list evals to false!
+				`(,~,old ;(list ;old-args)
+					(,~,new ,(args [,n t]) ;body))
+				`(do ;body)))))
 
 
-(mac each (x seq . body)
-	(luq (it return _seq)
-		`(let ,_seq ,seq
-			(wcc ,return
-				(let ,it (iterator ,_seq ,return)
-					(while t
-						(let ,x (,it)
-							;body)))))))
-
-(pluralize2 each eachs)
-
-(mac eachpair (x y seq . body)
-	(luq (it return _seq)
-		`(let ,_seq ,seq
-			(if
-				(wcc ,return
-					(let ,it (iterator ,_seq ,return)
-						(while t
-							(let (,x (,it nil) ,y (,it t))
-								;body))))
-				(prn 'WARNING: eachpair invoked on a sequence with an odd number of elements.')))))
-
-(pluralize3 eachpair eachpairs)
+(pluralize 2 for fors)
+(pluralize 2 each eaches)
+(pluralize 3 eachpair eachpairs)
 
 
 
 
 #GENERATION
 
-(mac agen (i r . body)
+(mac agen (i r [body])
 	(luq ret
 		`(let ,ret []
 			(for ,i ,r
 				(,ret nil (do ;body)))
 			,ret)))
 
-(pluralize2 agen agens)
+(pluralize 2 agen agens)
 
-(mac anof (r . body)
+(mac anof (r [body])
 	(luq i `(agen ,i ,r ;body)))
 
-(pluralize1 anof anofs)
+(pluralize 1 anof anofs)
 
 
 
@@ -446,10 +438,10 @@
 #	[(f 1 4) (f 1 5) (f 1 6)]
 #	[(f 2 4) (f 2 5) (f 2 6)]
 #	[(f 3 4) (f 3 5) (f 3 6)]]
-(def amap (f . groups)
+(def amap (f (groups))
 	(_map f nil [] groups))
 
-(def cmap (f . groups)
+(def cmap (f (groups))
 	(_map f list [] groups))
 
 
@@ -485,11 +477,11 @@
 
 #CONTAINER MEMBERSHIP
 
-(mac among (x . args)
+(mac among (x [args])
 	(let dict {}
-		(while args
-			(dict (pop! args) t))
-			`(if (,dict ,x))))
+		(each arg args
+			(dict arg t))
+		`(if (,dict ,x))))
 
 (def in (x seq)
 	(wcc return
@@ -516,7 +508,7 @@
 							(nilcache args t))
 						ret))))))
 
-(mac defmemo (name args . body)
+(mac defmemo (name args [body])
 	`(assign ,name (memo (fn ,args ;body))))
 
 
@@ -531,12 +523,6 @@
 		`(let ,start (time)
 			;body
 			(- (time) ,start))))
-
-(def even? (n)
-	(if (== 0 (band n 1))))
-
-(def odd? (n)
-	(if (!= 0 (band n 1))))
 
 
 

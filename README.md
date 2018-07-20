@@ -1,7 +1,7 @@
 # Klip
 Klip is a lexically scoped Lisp inspired by Arc.
 
-Klip currently runs on a virtual machine implemented in Python. Why would anyone want to do this? Well, I thought it would be fun, and all the Lisp dialects I know of annoy me in some way.
+Klip currently runs on a virtual machine implemented in Python. Why would anyone do this? Well, I thought it would be fun, and all the Lisp dialects I know of annoy me in some way.
 
 It's nowhere near finished. This paragraph, for example, ends before it's really begun.
 
@@ -13,11 +13,11 @@ Klip differs from other Lisps in the usage of some symbols. In particular, the s
 |`( )`|literal cons list|
 |`[ ]`|literal array|
 |`{ }`|literal hash|
-|`~`|`~x` is shorthand for (quote x)|
-|``` ` ```|``` `x ``` is shorthand for (quasiquote x)|
-|`,`|`,x` is shorthand for (unquote x)|
-|`;`|`;x` is shorthand for (unquotesplicing x)|
-|`.`|`(1 2 . 3)` is an improper list whose last cons has a cdr of 3 rather than nil.|
+|`~`|`~x` is shorthand for `(quote x)`|
+|``` ` ```|``` `x ``` is shorthand for `(quasiquote x)`|
+|`,`|`,x` is shorthand for `(unquote x)`|
+|`;`|`;x` is shorthand for `(unquotesplicing x)`|
+|`.`|`(1 2 . 3)` is an improper list whose last cons has a cdr of 3 rather than `nil`.|
 |`'`|`'blah'` is a literal string|
 |`"`|`"can't"` is a literal string|
 |`#`|begins a rest-of-line comment|
@@ -31,13 +31,17 @@ Lambda is spelled ```fn``` in Klip.
 
 Parameter lists can be improper:
 
-```(fn (x . rest) ...)``` -> The name x will refer to the first argument, and rest will refer to a cons list of the remaining arguments.
+```(fn (x . rest) ...)``` -> The name `x` will refer to the first argument, and rest will refer to a cons list of the remaining arguments.
 
-```(fn args ...)``` -> The name args will refer to all of the arguments.
+```(fn args ...)``` -> The name `args` will refer to all of the arguments.
 
-Parameter lists can contain conses:
+Parameter lists can contain cons lists and arrays:
 
-```(fn (n (acc . 1)) ...)``` -> acc will be given a default value of 1 if the function is called with fewer than two arguments. *At the moment, default parameters are copied literally by the compiler, so only numbers, strings and unquoted symbols will work.*
+```(fn (n (acc 1)) ...)``` -> `acc` will be given a default value of 1 if the function is called with fewer than two arguments. *At the moment, default parameters are copied literally by the compiler, so only numbers, strings and unquoted symbols will work.*
+
+```(fn (x (args) y) ...)``` -> `x` will be given the value of the first argument, `y` the value of the last argument and 'args' the values of all the arguments in between, in a cons list.
+
+```(fn (x [args] y) ...)``` -> Same as above, but `args` will collect the arguments in an array.
 
 #### ```(assign <symbol> <expression>)```
 My intention is to implement something resembling Arc's = macro. That's why I chose the name ```assign``` instead of something shorter and better.

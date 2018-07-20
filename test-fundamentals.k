@@ -58,7 +58,7 @@
 				(fn ()
 					(assign self nil)
 					(assign self
-						(fn (n (acc . 1))
+						(fn (n (acc 1))
 							(branch (< n 2)
 								acc
 								(self (- n 1) (* acc n))))))))
@@ -66,7 +66,7 @@
 		(prn (fac1 5))))
 
 (prn '\tTest 10 (24, 120):')
-(assign fac2 (fn (n (acc . 1))
+(assign fac2 (fn (n (acc 1))
 	(branch (< n 2)
 		acc
 		(self (- n 1) (* acc n)))))
@@ -78,17 +78,17 @@
 	(fn (f)
 		(f 0)
 		(f 1))
-	(fn (n (test11-x . 9))
+	(fn (n (test11-x 9))
 		(branch (== n 0)
 			(assign test11-x 4))
 		(prn test11-x)
 		nil))
 
-(prn '\tTest 12 ARRAYS ([1 2 3], 3, 2, nil, [1 2 3 4], [3 4], 3, [1 2 4]):')
+(prn '\tTest 12 ARRAYS ([1 2 3], 3, 3, nil, [1 2 3 4], [3 4], 3, [1 2 4]):')
 (assign a [1 (+ 1 1) 3])
 (prn a)
 (prn (a))
-(prn (a 1))
+(prn (a -1))
 (prn (a nil 4))
 (prn a)
 (prn (a [2 t]))
@@ -103,6 +103,51 @@
 (prn (h 'three' 3))
 (prn (h 'one' nil))
 (prn h)
+
+(prn '\tTEST 14 FUNCTION ARGUMENT LISTS ((3 4), [3 4], [3 4] 5, (fish chips), nil, 1 2, 1 3 [5 7]):')
+(
+	(fn (x y (rest))
+		(prn rest))
+	1
+	2
+	3
+	4)
+(
+	(fn (x y [rest])
+		(prn rest))
+	1
+	2
+	3
+	4)
+(
+	(fn (x y [rest] last)
+		(prn rest last))
+	1
+	2
+	3
+	4
+	5)
+(
+	(fn all
+		(prn all))
+	'fish'
+	'chips')
+(
+	(fn (x y . rest)
+		(prn rest))
+	'fish'
+	'chips')
+(
+	(fn (x (y 2))
+		(prn x y))
+	1)
+(
+	(fn (x (y 2) [rest])
+		(prn x y rest))
+	1
+	3
+	5
+	7)
 
 
 
