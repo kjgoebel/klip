@@ -120,7 +120,7 @@ class Computer(object):
 	
 	def _br(self, nxt):
 		cond = self.stack.pop()
-		if cond == nil:
+		if klipFalse(cond):
 			self.pos += nxt.skip
 		self.pos += 1
 	

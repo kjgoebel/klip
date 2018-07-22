@@ -98,13 +98,13 @@
 (prn '\tTest 13 HASHES ({one 1 two 2}, 2, 2, nil, 1, {two 2 three 3}:')
 (assign h {'one' 1 'two' (+ 1 1)})
 (prn h)
-(prn (h))
+(prn (len h))
 (prn (h 'two'))
-(prn (h 'three' 3))
-(prn (h 'one' nil))
+(prn (set h 'three' 3))
+(prn (set h 'one' nil))
 (prn h)
 
-(prn '\tTEST 14 FUNCTION ARGUMENT LISTS:')
+(prn '\tTEST 14 FUNCTION ARGUMENT LISTS ((3 4), (3 4) 5, (fish chips), 1 2, 1 3 (5 7):')
 (
 	(fn (x y (rest))
 		(prn rest))
@@ -137,7 +137,9 @@
 	5
 	7)
 
-
+(prn '\tTEST 15 TEST STRINGS (I am feeling very lucky today., a = (1 2 3)):')
+(prn ('I am feeling very %s today.' 'lucky'))
+(prn ('a = %s' (list 1 2 3)))
 
 
 

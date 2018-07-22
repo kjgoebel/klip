@@ -45,18 +45,30 @@ if not hasattr(builtins, '_prefix'):
 	t = Sym('t')
 	builtins.t = t
 	
+	class KlipCollection(object):
+		def __call__(self, env, *args):
+			try:
+				item = self[args[0]]
+			except IndexError:
+				return nil
+			
+			if len(args) > 1:
+				return item(env, args[1:])
+			return item
+		
+		def __hash__(self):
+			return id(self)
+		def __eq__(self, other):
+			return id(self) == id(other)
+		def __neq__(self, other):
+			return id(self) != id(other)
+	
 	def _makeIx(ix):
 		if isa(ix, KlipList):
 			return slice(*[None if x == t else x for x in ix])
 		return ix
 	
-	class KlipList(list):
-		def __call__(self, env, *args):
-			ret = self[args[0]]
-			if len(args) > 1:
-				return ret(env, args[1:])
-			return ret
-		
+	class KlipList(KlipCollection, list):
 		def __getitem__(self, index):
 			ret = list.__getitem__(self, _makeIx(index))
 			if type(ret) == list:
@@ -80,63 +92,35 @@ if not hasattr(builtins, '_prefix'):
 			list.append(self, value)
 			return nil
 		
-		def __hash__(self):
-			return id(self)
-		
 		def __str__(self):
 			return '(%s)' % ' '.join([str(x) for x in self])
 		def __repr__(self):
-			return str(self)
-		
-		def pop(self, ix):
-			if isa(ix, slice):
-				ret = self[ix]
-				del self[ix]
-				return ret
-			return list.pop(self, ix)
+			return '(%s)' % ' '.join([repr(x) for x in self])
 	builtins.KlipList = KlipList
 	
-	class KlipHash(dict):
-		def __call__(self, env, *args):
-			if len(args) == 0:
-				return len(self)
+	class KlipHash(KlipCollection, dict):
+		def set(self, index, value):
+			try:
+				ret = self[index]
+			except KeyError:
+				ret = nil
 			
-			if len(args) == 1:
-				try:
-					return self[args[0]]
-				except KeyError:
-					return nil
+			if value == nil:
+				del self[index]
+			else:
+				dict.__setitem__(self, index, value)
 			
-			if len(args) == 2:
-				if args[1] == nil:
-					try:
-						return self.pop(args[0])
-					except KeyError:
-						return nil
-				if args[0] == nil:
-					raise ValueError('nil cannot be a key in a hash.')
-				self[args[0]] = args[1]
-				return nil
-			
-			raise ValueError('hash object called with more than two arguments.')
+			return ret
 		
 		def __str__(self):
 			return '{%s}' % ' '.join(['%s %s' % (k, v) for k, v in self.items()])
 		def __repr__(self):
-			return 'KlipHash({%s})' % ', '.join(['%s: %s' % (repr(k), repr(v)) for k, v in self.items()])
+			return '{%s}' % ', '.join(['%s: %s' % (repr(k), repr(v)) for k, v in self.items()])
 	builtins.KlipHash = KlipHash
 	
 	class KlipStr(str):
 		def __call__(self, env, *args):
-			if len(args) == 0:
-				return len(self)
-			
-			if len(args) == 1:
-				return KlipStr(self[args[0]])
-			
-			if args[0] != nil:
-				raise ValueError('For string formatting, the first argument must be nil.')
-			return KlipStr(self % args[1:])		#This is a gruesome, heinous hack. But man, I really want to be able to format strings by calling them.
+			return KlipStr(self % args)
 	builtins.KlipStr = KlipStr
 	
 	class SpliceWrapper(list):
@@ -150,6 +134,14 @@ if not hasattr(builtins, '_prefix'):
 			else:
 				yield arg
 	builtins.flatten = flatten
+	
+	
+	def klipFalse(x):
+		try:
+			return len(x) == 0
+		except TypeError:
+			return x == nil
+	builtins.klipFalse = klipFalse
 	
 	
 	builtins.debugTrace = False
