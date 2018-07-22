@@ -45,22 +45,40 @@ if not hasattr(builtins, '_prefix'):
 	t = Sym('t')
 	builtins.t = t
 	
+	def _makeIx(ix):
+		if isa(ix, KlipList):
+			return slice(*[None if x == t else x for x in ix])
+		return ix
+	
 	class KlipList(list):
 		def __call__(self, env, *args):
-			if isa(args[0], KlipList):
-				ix = slice(*args[0])
-			else:
-				ix = args[0]
-			ret = self[ix]
-			if isa(ret, KlipList):
+			ret = self[args[0]]
+			if len(args) > 1:
 				return ret(env, args[1:])
 			return ret
 		
 		def __getitem__(self, index):
-			ret = list.__getitem__(self, index)
+			ret = list.__getitem__(self, _makeIx(index))
 			if type(ret) == list:
 				return KlipList(ret)			#I'm not happy about constructing another list here.
 			return ret
+		
+		def set(self, index, value):
+			ix = _makeIx(index)
+			ret = self[ix]
+			if value == nil:
+				del self[ix]
+			else:
+				list.__setitem__(self, ix, value)
+			return ret
+		
+		def insert(self, index, value):
+			list.insert(self, index, value)
+			return nil
+		
+		def append(self, value):
+			list.append(self, value)
+			return nil
 		
 		def __hash__(self):
 			return id(self)
@@ -69,6 +87,13 @@ if not hasattr(builtins, '_prefix'):
 			return '(%s)' % ' '.join([str(x) for x in self])
 		def __repr__(self):
 			return str(self)
+		
+		def pop(self, ix):
+			if isa(ix, slice):
+				ret = self[ix]
+				del self[ix]
+				return ret
+			return list.pop(self, ix)
 	builtins.KlipList = KlipList
 	
 	class KlipHash(dict):

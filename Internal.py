@@ -42,15 +42,31 @@ def _hash(env, *args):
 	return ret
 
 
-def _items(env, arg):
-	if isa(arg, KlipList):
-		return arg[:]
-	elif isa(arg, KlipHash):
-		return KlipList([Cons(k, v) for k, v in arg.items()])
-	elif isa(arg, KlipStr):
-		return KlipList([x for x in arg])
+
+
+def _items(env, con):
+	if isa(con, KlipList):
+		return con[:]
+	elif isa(con, KlipHash):
+		return KlipList([Cons(k, v) for k, v in con.items()])
+	elif isa(con, KlipStr):
+		return KlipList([x for x in con])
 	else:
-		raise ValueError("Can't get items from %s." % arg)
+		raise ValueError("Can't get items from %s." % con)
+
+def _len(env, con):
+	return len(con)
+
+def _set(env, con, ix, value):
+	return con.set(ix, value)
+
+def _insert(env, con, ix, value):
+	return con.insert(ix, value)
+
+def _append(env, con, value):
+	return con.append(value)
+
+
 
 
 _typeDict = {k : Sym(v) for k, v in {
@@ -114,6 +130,10 @@ klipDefaults = {
 	'hash' : _hash,
 	
 	'items' : _items,
+	'len' : _len,
+	'set' : _set,
+	'insert' : _insert,
+	'append' : _append,
 	
 	'type?' : _typeq,
 	
