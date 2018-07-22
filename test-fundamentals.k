@@ -85,13 +85,13 @@
 		nil))
 
 (prn '\tTest 12 ARRAYS ((1 2 3), 3, 3, nil, (1 2 3 4), (3 4), 3, (1 2 4)):')
-(assign a (list 1 (+ 1 1) 3))
+(assign a [1 (+ 1 1) 3])
 (prn a)
 (prn (len a))
 (prn (a -1))
 (prn (append a 4))
 (prn a)
-(prn (a (list 2 t)))
+(prn (a [2 t]))
 (prn (set a 2 nil))
 (prn a)
 
