@@ -22,10 +22,7 @@ def _rprn(env, *args):
 
 
 def _list(env, *args):
-	return clist(list(flatten(args)))
-
-def _array(env, *args):
-	return KlipArray(flatten(args))
+	return KlipList(flatten(args))
 
 def _hash(env, *args):
 	allArgs = flatten(args)
@@ -45,21 +42,13 @@ def _hash(env, *args):
 	return ret
 
 
-def _car(env, arg):
-	return arg.car
-def _cdr(env, arg):
-	return arg.cdr
-
-def _cons(env, x, y):
-	return Cons(x, y)
-
 def _items(env, arg):
-	if isa(arg, KlipArray):
-		return KlipArray([x for x in arg])
+	if isa(arg, KlipList):
+		return arg[:]
 	elif isa(arg, KlipHash):
-		return KlipArray([Cons(k, v) for k, v in arg.items()])
+		return KlipList([Cons(k, v) for k, v in arg.items()])
 	elif isa(arg, KlipStr):
-		return KlipArray([x for x in arg])
+		return KlipList([x for x in arg])
 	else:
 		raise ValueError("Can't get items from %s." % arg)
 
@@ -68,12 +57,11 @@ _typeDict = {k : Sym(v) for k, v in {
 	int : 'int',
 	float : 'float',
 	KlipStr : 'str',
-	KlipArray : 'array',
+	KlipList : 'list',
 	KlipHash : 'hash',
 	Sym : 'sym',
 	#GenSym : 'sym',
 	LitFunc : 'func',
-	Cons : 'cons',
 }.items()}
 
 def _typeq(env, *args):
@@ -123,12 +111,7 @@ klipDefaults = {
 	'rprn' : _rprn,
 	
 	'list' : _list,
-	'array' : _array,
 	'hash' : _hash,
-	
-	'car' : _car,
-	'cdr' : _cdr,
-	'cons' : _cons,
 	
 	'items' : _items,
 	

@@ -45,128 +45,31 @@ if not hasattr(builtins, '_prefix'):
 	t = Sym('t')
 	builtins.t = t
 	
-	class Cons(object):
-		class _ConsIter(object):
-			def __init__(self, cons):
-				self.cons = cons
-				self.this = None
-			def __iter__(self):
-				return self
-			def __next__(self):
-				if self.this == None:
-					self.this = self.cons
-				else:
-					self.this = self.this.cdr
-				if not isa(self.this, Cons):
-					raise StopIteration
-				return self.this.car
-		
-		def __init__(self, car, cdr):
-			self._car = car
-			#Conses must be immutable and hashable, so that they can be keys 
-			#in KlipHashes. But they must be able to contain unhashable 
-			#things (KlipArrays and KlipHashes) so that those objects can be 
-			#literals in programs. So, in some sense the value of a Cons can 
-			#change, if the array it contains is altered, but it still points 
-			#to the same array, so its hash remains the same. Note also that 
-			#two Conses which contain different array objects that happen to 
-			#have the same values will NOT be considered equal.
-			try:
-				carHash = hash(car)
-			except TypeError:
-				carHash = id(car)
-				self._carForComp = carHash
-			else:
-				self._carForComp = car
-			
-			self._cdr = cdr
-			try:
-				cdrHash = hash(cdr)
-			except TypeError:
-				cdrHash = id(cdr)
-				self._cdrForComp = cdrHash
-			else:
-				self._cdrForComp = cdr
-			
-			self._hash = carHash + cdrHash
-		
-		def _getCar(self):
-			return self._car
-		car = property(_getCar)
-		
-		def _getCdr(self):
-			return self._cdr
-		cdr = property(_getCdr)
-		
-		def _subStr(self, func):
-			if isa(self.cdr, Cons):
-				return func(self.car) + ' ' + self.cdr._subStr(func)
-			if self.cdr == nil:
-				return func(self.car)
-			return func(self.car) + ' . ' + func(self.cdr)
-		
-		def __str__(self):
-			return '(%s)' % self._subStr(str)
-		def __repr__(self):
-			return '(%s)' % self._subStr(repr)
-		
-		def __hash__(self):
-			return self._hash
-		
-		def __eq__(self, other):
-			if not isa(other, Cons):
-				return False
-			return self._carForComp == other._carForComp and self._cdrForComp == other._cdrForComp
-		def __neq__(self, other):
-			if not isa(other, Cons):
-				return True
-			return self._carForComp != other._carForComp and self._cdrForComp != other._cdrForComp
-		
-		def __iter__(self):
-			return Cons._ConsIter(self)
-	builtins.Cons = Cons
-	
-	class KlipArray(list):
+	class KlipList(list):
 		def __call__(self, env, *args):
-			if len(args) == 0:
-				return len(self)
-			
-			if isa(args[0], KlipArray):
-				ix = slice(*[None if (x == t) else x for x in args[0]])
+			if isa(args[0], KlipList):
+				ix = slice(*args[0])
 			else:
 				ix = args[0]
-			
-			if len(args) == 1:
-				if isa(ix, slice):
-					return KlipArray(self[ix])
-				return self[ix]
-			
-			if len(args) == 2:
-				if args[1] == nil:
-					return self.pop(ix)
-				if ix == nil:
-					self.append(args[1])
-					return nil
-				self[ix] = args[1]
-				return nil
-			
-			#This.... This should not be. I'm sorry. I had a dream of using 
-			#basic Lisp constructs to deal with containers without cluttering 
-			#up the built-in namespace with names like array-get, array-set, 
-			#etc. But this is.... I'm not happy about it.
-			if len(args) == 3:
-				if args[1] != nil:
-					raise ValueError('If an array is called with three arguments, the second one must be nil.')
-				self.insert(args[0], args[2])
-				return nil
-			
-			raise ValueError('array object called with more than three arguments.')
+			ret = self[ix]
+			if isa(ret, KlipList):
+				return ret(env, args[1:])
+			return ret
+		
+		def __getitem__(self, index):
+			ret = list.__getitem__(self, index)
+			if type(ret) == list:
+				return KlipList(ret)			#I'm not happy about constructing another list here.
+			return ret
+		
+		def __hash__(self):
+			return id(self)
 		
 		def __str__(self):
-			return '[%s]' % ' '.join([str(x) for x in self])
+			return '(%s)' % ' '.join([str(x) for x in self])
 		def __repr__(self):
-			return 'KlipArray([%s])' % ', '.join([repr(x) for x in self])
-	builtins.KlipArray = KlipArray
+			return str(self)
+	builtins.KlipList = KlipList
 	
 	class KlipHash(dict):
 		def __call__(self, env, *args):
@@ -223,32 +126,6 @@ if not hasattr(builtins, '_prefix'):
 				yield arg
 	builtins.flatten = flatten
 	
-	class EndCapWrapper(object):
-		def __init__(self, contents):
-			self.contents = contents
-	builtins.EndCapWrapper = EndCapWrapper
-	
-	
-	def clist(args, i = 0):
-		if i >= len(args):
-			return nil
-		head = args[i]
-		if isa(head, EndCapWrapper):
-			if i < len(args) - 1:
-				raise ValueError('clist: End cap encountered before end of args.')
-			return head.contents
-		return Cons(head, clist(args, i + 1))
-	builtins.clist = clist
-	
-	def unclist(c):
-		ret = []
-		while isa(c, Cons):
-			ret.append(c.car)
-			c = c.cdr
-		if c != nil:
-			ret.append(EndCapWrapper(c))
-		return ret
-	builtins.unclist = unclist
 	
 	builtins.debugTrace = False
 	builtins.debugCompile = False

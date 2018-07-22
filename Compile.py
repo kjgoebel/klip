@@ -13,9 +13,9 @@ class CompileError(Exception):
 
 
 _cont = Sym(' cont')
-_contList = Cons(_cont, nil)
+_contList = KlipList([_cont])
 _ret = Sym(' ret')
-_retList = Cons(_ret, nil)
+_retList = KlipList([_ret])
 _dummy = Sym(' dummy')
 
 
@@ -31,12 +31,12 @@ def _finish(ret, cap, waiting, tail):
 	return ret
 
 
-def c_branch(env, xpr, offset, waiting, tail, qq):
-	cond = c_xpr(env, xpr.car, offset, True, False, qq)
-	consequent = c_xpr(env, xpr.cdr.car, offset + len(cond) + 1, waiting, tail, qq)
+def c_branch(env, rest, offset, waiting, tail, qq):
+	cond = c_xpr(env, rest[0], offset, True, False, qq)
+	consequent = c_xpr(env, rest[1], offset + len(cond) + 1, waiting, tail, qq)
 	
-	if xpr.cdr.cdr != nil:
-		alternative = c_xpr(env, xpr.cdr.cdr.car, offset + len(cond) + len(consequent) + 2, waiting, tail, qq)
+	if len(rest) > 2:
+		alternative = c_xpr(env, rest[2], offset + len(cond) + len(consequent) + 2, waiting, tail, qq)
 		consequent.append(Jmp(len(alternative)))
 	else:
 		alternative = _finish([], Lit(nil), waiting, tail)
@@ -48,15 +48,20 @@ def c_branch(env, xpr, offset, waiting, tail, qq):
 	return cond + consequent + alternative
 
 def c_assign(env, rest, offset, waiting, tail, qq):
-	ret = c_xpr(env, rest.cdr.car, offset, True, False, qq)
-	ret.append(St(rest.car))
-	return _finish(ret, Ld(rest.car), waiting, tail)
+	ret = c_xpr(env, rest[1], offset, True, False, qq)
+	ret.append(St(rest[0]))
+	return _finish(ret, Ld(rest[0]), waiting, tail)
 
 def c_fn(env, rest, offset, waiting, tail, qq):
-	return _finish([], Fn(Cons(_cont, rest.car), rest.cdr), waiting, tail)
+	parmList = rest[0]
+	if isa(parmList, Sym):
+		parmList = KlipList([_cont, KlipList([parmList])])		#Man, this is ugly. And slow.
+	else:
+		parmList.insert(0, _cont)
+	return _finish([], Fn(parmList, rest[1:]), waiting, tail)
 
 def c_ccc(env, rest, offset, waiting, tail, qq):
-	ret = c_xpr(env, rest.car, offset, True, False, qq)
+	ret = c_xpr(env, rest[0], offset, True, False, qq)
 	pos = offset + len(ret) + 3
 	
 	#This is the continuation that will be invoked by the tail of the user 
@@ -71,16 +76,16 @@ def c_ccc(env, rest, offset, waiting, tail, qq):
 	#needs to pop the previous continuation and the user function itself off 
 	#the stack. This is dumb, and could be fixed with a little thought, I 
 	#think.
-	ret.append(Cont(clist((_dummy, _ret)), pos, 2))
+	ret.append(Cont(KlipList([_dummy, _ret]), pos, 2))
 	
 	ret.append(Call(2))
 	return _finish(ret, Ld(_ret), waiting, tail)
 
 def c_quote(env, rest, offset, waiting, tail, qq):
-	return _finish([], Lit(rest.car), waiting, tail)
+	return _finish([], Lit(rest[0]), waiting, tail)
 
 def c_quasiquote(env, rest, offset, waiting, tail, qq):
-	return c_xpr(env, rest.car, offset, waiting, tail, qq + 1)
+	return c_xpr(env, rest[0], offset, waiting, tail, qq + 1)
 
 def c_unquote(env, rest, offset, waiting, tail, qq):
 	raise CompileError('unquote is undefined at quote level 0.')
@@ -89,17 +94,17 @@ def c_unquotesplicing(env, rest, offset, waiting, tail, qq):
 	raise CompileError('unquotesplicing is undefined at quote level 0.')
 
 def c_mac(env, rest, offset, waiting, tail, qq):
-	name = rest.car
-	parmList = rest.cdr.car
-	body = rest.cdr.cdr
+	name = rest[0]
+	parmList = rest[1]
+	body = rest[2:]
 	_allMacros[name] = parmList, compMacro(env, body)
 	return _finish([], Lit(nil), waiting, tail)
 
 def c_apply(env, rest, offset, waiting, tail, qq):
-	ret = c_xpr(env, rest.car, offset, True, False, qq)
+	ret = c_xpr(env, rest[0], offset, True, False, qq)
 	temp = Cont(_retList, 'Dummy value. See below.')
 	ret.append(temp)
-	ret += c_xpr(env, rest.cdr.car, offset + len(ret), True, False, qq)
+	ret += c_xpr(env, rest[1], offset + len(ret), True, False, qq)
 	ret.append(Splice())
 	ret.append(Call(2))
 	temp.pos = offset + len(ret)
@@ -128,12 +133,12 @@ _allMacros = {}
 
 
 def macex(xpr, head = True):
-	if isa(xpr, Cons):
+	if isa(xpr, KlipList):
 		changed = False
-		while isa(xpr, Cons) and isa(xpr.car, Sym) and xpr.car in _allMacros:
-			parmList, func = _allMacros[xpr.car]
+		while isa(xpr, KlipList) and isa(xpr[0], Sym) and xpr[0] in _allMacros:
+			parmList, func = _allMacros[xpr[0]]
 			c = Computer(func)
-			args = unclist(xpr.cdr)
+			args = xpr[1:]
 			wrangleArgs(c.env, parmList, args)
 			while True:
 				try:
@@ -151,16 +156,6 @@ def getAllMacros():
 	return _allMacros
 
 
-def c_array(env, xpr, offset, waiting, tail, qq):
-	ret = [Ld(Sym('array'))]
-	temp = Cont(_retList, 'Dummy value. See below.')
-	ret.append(temp)
-	for sub in xpr:
-		ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
-	ret.append(Call(len(xpr) + 1))
-	temp.pos = offset + len(ret)
-	return _finish(ret, Ld(_ret), waiting, tail)
-
 def c_hash(env, xpr, offset, waiting, tail, qq):
 	ret = [Ld(Sym('hash'))]
 	temp = Cont(_retList, 'Dummy value. See below.')
@@ -174,18 +169,17 @@ def c_hash(env, xpr, offset, waiting, tail, qq):
 
 
 def c_qq(env, xpr, offset, waiting, tail, qq):
-	if isa(xpr, Cons):
-		head = xpr.car
-		rest = xpr.cdr
+	if isa(xpr, KlipList):
+		head = xpr[0]
 		
 		if head == Sym('unquote'):
 			qq -= 1
 			if qq == 0:
-				return c_xpr(env, rest.car, offset, waiting, tail, qq)
+				return c_xpr(env, xpr[1], offset, waiting, tail, qq)
 		elif head == Sym('unquotesplicing'):
 			qq -= 1
 			if qq == 0:
-				ret = c_xpr(env, rest.car, offset, waiting, tail, qq)
+				ret = c_xpr(env, xpr[1], offset, waiting, tail, qq)
 				ret.append(Splice())
 				return ret
 		elif head == Sym('quasiquote'):
@@ -194,25 +188,11 @@ def c_qq(env, xpr, offset, waiting, tail, qq):
 		ret = [Ld(Sym('list'))]
 		temp = Cont(_retList, 'Dummy value. See below.')
 		ret.append(temp)
-		count = 1
-		while True:
-			if xpr == nil:
-				break
-			if isa(xpr, Cons):
-				ret += c_xpr(env, xpr.car, offset + len(ret), True, False, qq)
-				count += 1
-				xpr = xpr.cdr
-			else:
-				ret += c_xpr(env, xpr, offset + len(ret), True, False, qq)
-				ret.append(EndCap())
-				count += 1
-				break
-		ret.append(Call(count))
+		for sub in xpr:
+			ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
+		ret.append(Call(len(xpr) + 1))
 		temp.pos = offset + len(ret)
 		return _finish(ret, Ld(_ret), waiting, tail)
-	
-	if isa(xpr, KlipArray):
-		return c_array(env, xpr, offset, waiting, tail, qq)
 	
 	if isa(xpr, KlipHash):
 		return c_hash(env, xpr, offset, waiting, tail, qq)
@@ -221,17 +201,18 @@ def c_qq(env, xpr, offset, waiting, tail, qq):
 
 
 def c_body(env, xpr, offset, waiting, tail, qq):
-	if xpr == nil:
+	if not xpr:
 		return _finish([], Lit(nil), waiting, tail)
-	if xpr.cdr == nil:
-		return c_xpr(env, xpr.car, offset, waiting, tail, qq)
-	temp = c_xpr(env, xpr.car, offset, False, False, qq)
-	return temp + c_body(env, xpr.cdr, offset + len(temp), waiting, tail, qq)
+	ret = []
+	for sub in xpr[:-1]:
+		ret += c_xpr(env, sub, offset + len(ret), False, False, qq)
+	ret += c_xpr(env, xpr[-1], offset + len(ret), waiting, tail, qq)
+	return ret
 
 
-def c_cons(env, xpr, offset, waiting, tail, qq):
-	head = xpr.car
-	rest = xpr.cdr
+def c_list(env, xpr, offset, waiting, tail, qq):
+	head = xpr[0]
+	rest = xpr[1:]
 	
 	#Special forms:
 	if isa(head, Sym):
@@ -241,26 +222,18 @@ def c_cons(env, xpr, offset, waiting, tail, qq):
 	
 	#ordinary combination:
 	if tail:
-		ret = c_xpr(env, xpr.car, offset, True, False, qq)
+		ret = c_xpr(env, head, offset, True, False, qq)
 		ret.append(Ld(_cont))
-		this = xpr.cdr
-		count = 1
-		while this != nil:
-			ret += c_xpr(env, this.car, offset + len(ret), True, False, qq)
-			this = this.cdr
-			count += 1
-		ret.append(Call(count))
+		for sub in xpr[1:]:
+			ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
+		ret.append(Call(len(xpr)))			#-1 for the fn itself, +1 for the continuation.
 	else:
-		ret = c_xpr(env, xpr.car, offset, True, False, qq)
+		ret = c_xpr(env, xpr[0], offset, True, False, qq)
 		temp = Cont(_retList, 'Dummy value. See below.')
 		ret.append(temp)
-		this = xpr.cdr
-		count = 1
-		while this != nil:
-			ret += c_xpr(env, this.car, offset + len(ret), True, False, qq)
-			this = this.cdr
-			count += 1
-		ret.append(Call(count))
+		for sub in rest:
+			ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
+		ret.append(Call(len(xpr)))
 		temp.pos = offset + len(ret)
 		if waiting:
 			ret.append(Ld(_ret))
@@ -268,8 +241,7 @@ def c_cons(env, xpr, offset, waiting, tail, qq):
 
 
 _xprTable = {
-	Cons : c_cons,
-	KlipArray : c_array,
+	KlipList : c_list,
 	KlipHash : c_hash
 }
 
@@ -279,50 +251,6 @@ def c_xpr(env, xpr, offset, waiting, tail, qq):
 		return c_qq(env, xpr, offset, waiting, tail, qq)
 	
 	xpr = macex(xpr)
-	
-	#An attempt to deal with the nested fn forms that macros like lets 
-	#generate. This quite accurately detects and corrects such nested fn forms, 
-	#but it doesn't help because macro expansion isn't recursive (so at the 
-	#time that this code runs, there are no nested fns). We need recursive 
-	#macro expansion.
-	#Note: one could call this process head call optimization.
-	#Note: this by itself still won't work even with proper macro expansion. 
-	#The head call optimizer must be able to look into innerArgs and discover 
-	#any expressions that depend on innerParms, 'cuz that's the whole point of 
-	#the lets macro.
-	# if isa(xpr, Cons):
-		# head = xpr.car
-		# if isa(head, Cons) and head.car == Sym('fn'):
-			# outerParms = head.cdr.car
-			# outerArgs = xpr.cdr
-			# outerBody = head.cdr.cdr
-			
-			# print('outer body', outerBody)
-			
-			# if outerBody.cdr == nil and isa(outerBody.car, Cons):
-				# subHead = outerBody.car
-				# if isa(subHead.car, Cons) and subHead.car.car == Sym('fn'):
-					# innerParms = subHead.car.cdr.car
-					# innerArgs = subHead.cdr
-					# innerBody = subHead.car.cdr.cdr
-					
-					# print('\tthis xpr', xpr)
-					# print('\touterParms, outerArgs', outerParms, outerArgs)
-					# print('\tinnerParms, innerArgs', innerParms, innerArgs)
-					
-					# print('\tinnerBody', innerBody)
-					
-					# newParms = list(outerParms) + list(innerParms)
-					# newArgs = list(outerArgs) + list(innerArgs)
-					# print('\tnewParms, newArgs', newParms, newArgs)
-					
-					# newXpr = clist((
-						# clist((Sym('fn'), clist(newParms), EndCapWrapper(innerBody))),
-						# EndCapWrapper(clist(newArgs))))
-					# print('\tNEW XPR', newXpr)
-					
-					# print('\t', xpr, ' -> ', newXpr)
-					# return c_xpr(env, newXpr, offset, waiting, tail, qq)
 	
 	f = _xprTable.get(type(xpr), None)
 	if f:
@@ -365,15 +293,15 @@ def compFile(env, tree, offset = 0, main = True):
 	code = []
 	for xpr in tree:
 		try:
-			if isa(xpr, Cons) and xpr.car == Sym('include'):
-				fname = xpr.cdr.car
+			if isa(xpr, KlipList) and xpr[0] == Sym('include'):
+				fname = xpr[1]
 				fin = open(fname, 'r')
 				sub = parse(tokenize(preprocess(fin.read()), fname), fname)
 				fin.close()
 				code += compFile(env, sub, offset + len(code), False)
 			else:
 				#This seems super inefficient. But I don't see any other way of allowing macros to see earlier function definitions.
-				code.append(Fn(_contList, clist((xpr, ))))
+				code.append(Fn(_contList, KlipList([xpr])))
 				code.append(Cont(_retList, len(code) + 2))
 				code.append(Call(1, notes = 'compFile'))
 		except CompileError as e:
@@ -410,5 +338,7 @@ if __name__ == '__main__':
 	
 	print(tree)
 	
-	code = comp(None, tree)
+	lf = comp(None, KlipList(), tree)
+	
+	dumpCode(lf.func.code)
 

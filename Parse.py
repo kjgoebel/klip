@@ -38,43 +38,18 @@ class Parser(object):
 		line = self.cur.line
 		self.inc('Dangling %s. %s line %d' % (procliticName, fname, line))
 		temp = self.parseTerminal()
-		return clist((Sym(realName), temp))
-	
-	def parseDot(self):
-		fname = self.cur.fname
-		line = self.cur.line
-		self.inc('Dangling dot. %s line %d' % (fname, line))
-		temp = self.parseTerminal()
-		return EndCapWrapper(temp)
+		return KlipList([Sym(realName), temp])
 	
 	def parseTerminal(self):
 		if self.cur.value == '(':
 			complaintParms = self.cur.fname, self.cur.line
-			temp = []
+			temp = KlipList()
 			self.inc('Unmatched open parenthesis. %s line %d' % complaintParms)
 			while True:
-				if self.cur.value == '.':
-					temp.append(self.parseDot())
-					self.inc('Unmatched open parenthesis. %s line %d' % (self.cur.fname, self.cur.line))
-					if self.cur.value != ')':
-						raise ParseError('Only one item may follow the dot in a list. %s line %d' % (self.cur.fname, self.cur.line))
 				if self.cur.value == ')':
-					return clist(temp)
+					return temp
 				temp.append(self.parseTerminal())
 				self.inc('Unmatched open parenthesis. %s line %d' % complaintParms)
-		
-		if self.cur.value == '[':
-			complaintParms = self.cur.fname, self.cur.line
-			ret = KlipArray()
-			self.inc('Unmatched open bracket. %s line %d' % complaintParms)
-			while True:
-				if self.cur.value == ']':
-					return ret
-				v = self.parseTerminal()
-				if v == nil:
-					raise ParseError("nil can't be a value in an array.")
-				ret.append(v)
-				self.inc('Unmatched open bracket. %s line %d' % complaintParms)
 		
 		if self.cur.value == '{':
 			complaintParms = self.cur.fname, self.cur.line
@@ -127,13 +102,13 @@ class Parser(object):
 		self.it = iter(tokens)
 		self.inc(None)
 		
-		temp = []
+		temp = KlipList()
 		
 		while self.cur:
 			temp.append(self.parseTerminal())
 			self.inc(None)
 		
-		return clist(temp)
+		return temp
 
 
 

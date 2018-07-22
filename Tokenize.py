@@ -17,7 +17,7 @@ class TokenizeError(Exception):
 	pass
 
 
-gSingleCharTokens = {'(', ')', '[', ']', '{', '}', '~', '`', ',', ';', ':'}		#'.' is a special case, because it can be a decimal point.
+gSingleCharTokens = {'(', ')', '{', '}', '~', '`', ',', ';', ':'}
 
 
 
@@ -71,18 +71,6 @@ class Tokenizer(object):
 			elif c == '"':
 				self.endWord()
 				self.readString('"')
-			elif c == '.':
-				if not self.curWord:
-					self.tokens.append(Token(c, self.fname, self.line))
-				else:
-					#This is a weird hack, but it might be sufficient.
-					try:
-						float(self.curWord)
-					except ValueError:
-						self.endWord()
-						self.tokens.append(Token(c, self.fname, self.line))
-					else:
-						self.contWord(c)
 			elif c in gSingleCharTokens:
 				self.endWord()
 				self.tokens.append(Token(c, self.fname, self.line))

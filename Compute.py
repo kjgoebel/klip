@@ -7,63 +7,49 @@ import copy
 
 
 def wrangleArgs(env, parmList, args):
+	if isa(parmList, Sym):					#This is a special case now. The regular form would be (fn ((args)) ...). Fewer parentheses are better.
+		env.setLocal(parmList, args)
+		return
+	
 	before = []
-	restFunc = None
 	restName = None
 	after = []
 	
-	parms = parmList
-	while True:
-		if parms == nil:
-			break
-		if isa(parms, Cons):
-			if isa(parms.car, Cons) and parms.car.cdr == nil:
-				restFunc = clist
-				restName = parms.car.car
-				parms = parms.cdr
+	i = 0
+	while i < len(parmList):
+		parm = parmList[i]
+		if isa(parm, KlipList):
+			if len(parm) > 1:
+				before.append(parm)
+			else:
+				restName = parm[0]
+				i += 1
 				break
-			if isa(parms.car, KlipArray):
-				restFunc = KlipArray
-				restName = parms.car[0]
-				parms = parms.cdr
-				break
-			before.append(parms.car)
-			parms = parms.cdr
-		elif isa(parms, Sym):
-			restFunc = clist
-			restName = parms
-			parms = nil
-			break
 		else:
-			raise MachineError('Unexpected object found in parameter list: %s. %s %s' % (parms, parmList, args))
+			before.append(parm)
+		i += 1
 	
-	while True:
-		if parms == nil:
-			break
-		if not isa(parms, Cons):
-			raise MachineError('Improper parameter list. %s %s' % (parmList, args))
-		if not isa(parms.car, Sym):
-			raise MachineError('Only symbols may follow a rest parameter in a parameter list. %s %s' % (parmList, args))
-		after.append(parms.car)
-		parms = parms.cdr
+	while i < len(parmList):
+		after.append(parmList[i])
+		i += 1
 	
 	pos = 0
 	for parm in before:
 		if pos >= len(args):
-			if isa(parm, Cons):
-				env.setLocal(parm.car, parm.cdr.car)
+			if isa(parm, KlipList):
+				env.setLocal(parm[0], parm[1])
 			else:
 				raise MachineError('Not enough arguments. %s %s' % (parmList, args))
 		else:
-			if isa(parm, Cons):
-				env.setLocal(parm.car, args[pos])
+			if isa(parm, KlipList):
+				env.setLocal(parm[0], args[pos])
 			else:
 				env.setLocal(parm, args[pos])
 		pos += 1
 	
-	if not restFunc is None:
+	if restName:
 		pos = len(args) - len(after)
-		env.setLocal(restName, restFunc(args[len(before) : pos]))
+		env.setLocal(restName, KlipList(args[len(before) : pos]))
 	
 	for parm in after:
 		if pos >= len(args):

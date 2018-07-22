@@ -156,7 +156,7 @@ def makeInstClass(name, *fieldNames, **defaults):
 			setattr(self, fieldNames[i], args[i])
 		self.__dict__.update(kwargs)
 	def _repr(self):
-		ret = '%s((%s))' % (
+		ret = '%s<<%s>>' % (
 			name,
 			', '.join([
 				repr(getattr(self, fieldNames[i]))

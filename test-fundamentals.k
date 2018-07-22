@@ -84,16 +84,16 @@
 		(prn test11-x)
 		nil))
 
-(prn '\tTest 12 ARRAYS ([1 2 3], 3, 3, nil, [1 2 3 4], [3 4], 3, [1 2 4]):')
-(assign a [1 (+ 1 1) 3])
-(prn a)
-(prn (a))
-(prn (a -1))
-(prn (a nil 4))
-(prn a)
-(prn (a [2 t]))
-(prn (a 2 nil))
-(prn a)
+# (prn '\tTest 12 ARRAYS ((1 2 3), 3, 3, nil, (1 2 3 4), (3 4), 3, (1 2 4)):')
+# (assign a (list 1 (+ 1 1) 3))
+# (prn a)
+# (prn (a))
+# (prn (a -1))
+# (prn (a nil 4))
+# (prn a)
+# (prn (a (2 t)))
+# (prn (a 2 nil))
+# (prn a)
 
 (prn '\tTest 13 HASHES ({one 1 two 2}, 2, 2, nil, 1, {two 2 three 3}:')
 (assign h {'one' 1 'two' (+ 1 1)})
@@ -104,7 +104,7 @@
 (prn (h 'one' nil))
 (prn h)
 
-(prn '\tTEST 14 FUNCTION ARGUMENT LISTS ((3 4), [3 4], [3 4] 5, (fish chips), nil, 1 2, 1 3 [5 7]):')
+(prn '\tTEST 14 FUNCTION ARGUMENT LISTS:')
 (
 	(fn (x y (rest))
 		(prn rest))
@@ -113,14 +113,7 @@
 	3
 	4)
 (
-	(fn (x y [rest])
-		(prn rest))
-	1
-	2
-	3
-	4)
-(
-	(fn (x y [rest] last)
+	(fn (x y (rest) last)
 		(prn rest last))
 	1
 	2
@@ -133,16 +126,11 @@
 	'fish'
 	'chips')
 (
-	(fn (x y . rest)
-		(prn rest))
-	'fish'
-	'chips')
-(
 	(fn (x (y 2))
 		(prn x y))
 	1)
 (
-	(fn (x (y 2) [rest])
+	(fn (x (y 2) (rest))
 		(prn x y rest))
 	1
 	3
