@@ -34,9 +34,9 @@ Lambda is spelled ```fn``` in Klip.
 
 Parameter lists can contain lists:
 
-```(fn (n (acc 1)) ...)``` -> `acc` will be given a default value of 1 if the function is called with fewer than two arguments. *At the moment, default parameters are copied literally by the compiler, so only numbers, strings and unquoted symbols will work.*
+```(fn (n (acc 1)) ...)``` -> `acc` will be given a default value of 1 if the function is called with fewer than two arguments.
 
-```(fn (x (args) y) ...)``` -> `x` will be given the value of the first argument, `y` the value of the last argument and 'args' the values of all the arguments in between, in a list.
+```(fn (x (args)) ...)``` -> `x` will be given the value of the first argument and `args` will be given the values of all the remaining arguments, as a list.
 
 The entire parameter list can be a symbol:
 
