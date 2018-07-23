@@ -105,7 +105,7 @@
 (prn (pop h 'one'))
 (prn h)
 
-(prn '\tTEST 14 FUNCTION ARGUMENT LISTS ((3 4), (3 4) 5, (fish chips), 1 2, 1 3 (5 7):')
+(prn '\tTEST 14 FUNCTION PARAMETER LISTS ((3 4), (3 4) 5, (fish chips), 1 2, 1 3 (5 7), 1 6 ():')
 (
 	(fn (x y (rest))
 		(prn rest))
@@ -129,6 +129,10 @@
 	3
 	5
 	7)
+(
+	(fn (x (y (+ 3 3)) (rest))
+		(prn x y rest))
+	1)
 
 (prn '\tTEST 15 STRINGS (I am feeling very lucky today., a = (1 2 3)):')
 (prn ('I am feeling very %s today.' 'lucky'))

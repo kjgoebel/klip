@@ -20,9 +20,8 @@ builtins.debugEnv = ('denv' in sys.argv[1:])
 
 from Compile import compFile
 from Code import Func
-from Compute import Computer, wrangleArgs
+from Compute import Computer
 builtins.Computer = Computer			#This is a shitty hack to give Compile._macex access to Computer.
-builtins.wrangleArgs = wrangleArgs
 
 func = Func(_global, compFile(_global, tree))
 

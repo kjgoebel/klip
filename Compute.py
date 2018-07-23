@@ -6,59 +6,6 @@ import copy
 
 
 
-def wrangleArgs(env, parmList, args):
-	if isa(parmList, Sym):					#This is a special case now. The regular form would be (fn ((args)) ...). Fewer parentheses are better.
-		env.setLocal(parmList, args)
-		return
-	
-	before = []
-	restName = None
-	after = []
-	
-	i = 0
-	while i < len(parmList):
-		parm = parmList[i]
-		if isa(parm, KlipList):
-			if len(parm) > 1:
-				before.append(parm)
-			else:
-				restName = parm[0]
-				i += 1
-				break
-		else:
-			before.append(parm)
-		i += 1
-	
-	while i < len(parmList):
-		after.append(parmList[i])
-		i += 1
-	
-	pos = 0
-	for parm in before:
-		if pos >= len(args):
-			if isa(parm, KlipList):
-				env.setLocal(parm[0], parm[1])
-			else:
-				raise MachineError('Not enough arguments. %s %s' % (parmList, args))
-		else:
-			if isa(parm, KlipList):
-				env.setLocal(parm[0], args[pos])
-			else:
-				env.setLocal(parm, args[pos])
-		pos += 1
-	
-	if restName:
-		pos = len(args) - len(after)
-		env.setLocal(restName, KlipList(args[len(before) : pos]))
-	
-	for parm in after:
-		if pos >= len(args):
-			raise MachineError('Not enough arguments. %s %s' % (parmList, args))
-		env.setLocal(parm, args[pos])
-		pos += 1
-
-
-
 
 class Computer(object):
 	def __init__(self, func):

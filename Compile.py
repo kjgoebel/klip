@@ -57,7 +57,7 @@ def c_fn(env, rest, offset, waiting, tail, qq):
 	if isa(parmList, Sym):
 		parmList = KlipList([_cont, KlipList([parmList])])		#Man, this is ugly. And slow.
 	else:
-		parmList = [_cont] + parmList
+		parmList = KlipList([_cont] + parmList)					#This is also ugly and slow.
 	return _finish([], Fn(parmList, rest[1:]), waiting, tail)
 
 def c_ccc(env, rest, offset, waiting, tail, qq):
@@ -74,11 +74,11 @@ def c_ccc(env, rest, offset, waiting, tail, qq):
 	
 	ret += [
 		Call(2),
-		Arg(),			#Explicit call of cc goes here...
+		Arg(),			#Explicit call of cc lands here...
 		Pop(),			#and the user continuation is discarded.
 	]
 	
-	#Regular return of user function goes here.
+	#Regular return of user function lands here.
 	return _finish(ret, Arg(), waiting, tail)
 
 def c_quote(env, rest, offset, waiting, tail, qq):
@@ -138,8 +138,9 @@ def macex(xpr, head = True):
 		while isa(xpr, KlipList) and isa(xpr[0], Sym) and xpr[0] in _allMacros:
 			parmList, func = _allMacros[xpr[0]]
 			c = Computer(func)
-			args = xpr[1:]
-			wrangleArgs(c.env, parmList, args)
+			c.env.setArgs(xpr[1:])
+			#wrangleArgs(c.env, parmList, args)
+			
 			while True:
 				try:
 					c.step()
@@ -267,18 +268,21 @@ def c_xpr(env, xpr, offset, waiting, tail, qq):
 
 def c_parms(env, parmList):
 	ret = []
-	for parm in parmList:
-		if isa(parm, KlipList):
-			if len(parm) == 1:
-				ret += [RestArg(), StLocal(parm[0])]
+	if isa(parmList, KlipList):
+		for parm in parmList:
+			if isa(parm, KlipList):
+				if len(parm) == 1:
+					ret += [RestArg(), StLocal(parm[0])]
+				else:
+					temp = DefArg('Dummy value. See below.')
+					ret.append(temp)
+					ret += c_xpr(env, parm[1], len(ret), True, False, 0)
+					temp.pos = len(ret)
+					ret.append(StLocal(parm[0]))
 			else:
-				temp = DefArg('Dummy value. See below.')
-				ret.append(temp)
-				ret += c_xpr(env, parm[1], len(ret), True, False, 0)
-				temp.pos = len(ret)
-				ret.append(StLocal(parm[0]))
-		else:
-			ret += [Arg(), StLocal(parm)]
+				ret += [Arg(), StLocal(parm)]
+	else:
+		ret += [RestArg(), StLocal(parmList)]
 	return ret
 
 
@@ -300,11 +304,11 @@ def _doComp(env, body, parmList):
 	return ret
 
 def comp(env, parmList, body):
-	if body in _compCache:
-		code = _compCache[body]
+	if (parmList, body) in _compCache:
+		code = _compCache[(parmList, body)]
 	else:
 		code = _doComp(env, body, parmList)
-		_compCache[body] = code
+		_compCache[(parmList, body)] = code
 	
 	ret = LitFunc(Func(env, code), None, parmList, 0)
 	return ret
@@ -342,7 +346,7 @@ def compMacro(env, tree, parmList):
 		print('COMPILING MACRO', id(env), tree)
 	try:
 		code = c_parms(env, parmList)
-		code += c_body(env, tree, len(ret), True, False, 0)
+		code += c_body(env, tree, len(code), True, False, 0)
 		code.append(Halt())
 	except Exception as e:
 		print('ERROR WHILE COMPILING MACRO:\n', tree)

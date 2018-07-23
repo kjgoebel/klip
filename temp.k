@@ -1,10 +1,14 @@
-(include 'klip.k')
 
 
-(eachpairs (x y (list 1 2 3 4) z w (list 'fish' 'chips' 'chips' 'salsa'))
-	(prn x y z w))
+(set-var ~x 1)
+(set-var ~y 1)
 
-(fors (i 5 j 6) (prn i j))
+(prn x y)
+
+(set-var ~y 3)
+(prn x y)
+
+
 
 
 
