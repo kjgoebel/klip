@@ -66,6 +66,8 @@ class Computer(object):
 		self.code = func.code
 		self.pos = 0
 		self.stack = []
+		self.args = []
+		self.argPos = 0
 		self.env = Env(func.env, 'Computer()')
 		if debugEnv:
 			print('ENV SET')
@@ -114,6 +116,32 @@ class Computer(object):
 		self.stack.pop()
 		self.pos += 1
 	
+	def _arg(self, nxt):
+		if debugTrace:
+			self.env.dump(klipDefaults)
+		self.stack.append(self.env.arg())
+		self.pos += 1
+	
+	def _defArg(self, nxt):
+		if debugTrace:
+			self.env.dump(klipDefaults)
+		temp = self.env.defArg()
+		if temp is None:
+			self.pos += 1
+		else:
+			self.stack.append(temp)
+			self.pos = nxt.pos
+	
+	def _restArg(self, nxt):
+		if debugTrace:
+			self.env.dump(klipDefaults)
+		self.stack.append(self.env.restArg())
+		self.pos += 1
+	
+	def _stLocal(self, nxt):
+		self.env.setLocal(nxt.sym, self.stack.pop())
+		self.pos += 1
+	
 	def _jmp(self, nxt):
 		self.pos += nxt.skip
 		self.pos += 1
@@ -130,10 +158,10 @@ class Computer(object):
 	
 	def _cont(self, nxt):
 		if nxt.poppage is None:
-			temp = None
+			stk = None
 		else:
-			temp = copy.copy(self.stack[:-nxt.poppage])
-		self.stack.append(LitFunc(self.func, self.env, nxt.parmList, nxt.pos, temp))
+			stk = copy.copy(self.stack[:-nxt.poppage])
+		self.stack.append(LitFunc(self.func, self.env, nxt.parmList, nxt.pos, stk))
 		self.pos += 1
 	
 	def _call(self, nxt):
@@ -155,7 +183,7 @@ class Computer(object):
 			if debugEnv:
 				print('ENV SET')
 				self.env.dump(klipDefaults)
-			self.env.set(Sym(' ret'), ret)
+			self.env.setArgs([ret])
 			self.pos = lf.pos
 		elif isa(lf, LitFunc):
 			self.func = lf.func
@@ -164,13 +192,14 @@ class Computer(object):
 				self.env = lf.env
 			else:
 				self.env = Env(lf.func.env, '_call:normal')
+			self.env.setArgs(args)
 			if not lf.stack is None:
 				self.stack = copy.copy(lf.stack)
 			if debugEnv:
 				print('ENV SET')
 				self.env.dump(klipDefaults)
 			self.pos = lf.pos
-			wrangleArgs(self.env, lf.parmList, args)
+			#wrangleArgs(self.env, lf.parmList, args)
 		else:
 			raise MachineError('Call of non-function. (%s)' % lf)
 	
@@ -198,6 +227,12 @@ class Computer(object):
 		Pop : _pop,
 		Fn : _fn,
 		Halt : _halt,
+		
+		Arg : _arg,
+		DefArg : _defArg,
+		RestArg : _restArg,
+		StLocal : _stLocal,
+		
 		Splice : _splice,
 	}
 

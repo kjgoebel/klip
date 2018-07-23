@@ -1,3 +1,4 @@
+import Prefix
 import copy
 
 
@@ -18,9 +19,33 @@ class Env(object):
 		self.parent = parent
 		self.vars = {}
 		
+		self.args = []
+		self.argPos = 0
+		
 		if init:
 			for k, v in init.items():
 				self.vars[Sym(k)] = v
+	
+	def arg(self):
+		ret = self.args[self.argPos]
+		self.argPos += 1
+		return ret
+	
+	def defArg(self):
+		if self.argPos < len(self.args):
+			ret = self.args[self.argPos]
+			self.argPos += 1
+			return ret
+		return None
+	
+	def restArg(self):
+		ret = KlipList(self.args[self.argPos:])
+		self.argPos = len(self.args)
+		return ret
+	
+	def setArgs(self, args):
+		self.args = args
+		self.argPos = 0
 	
 	def get(self, name):
 		if name in self.vars:
@@ -50,98 +75,12 @@ class Env(object):
 		print(
 			'\t',
 			id(self),
+			self.args,
 			{k : v for k, v in self.vars.items() if not (k in ignore or isa(k, Sym) and k.name in ignore)}
 		)
 		if self.parent:
 			self.parent.dump(ignore)
 
-
-# class Binding(object):
-	# def __init__(self, target):
-		# self.target = target
-
-# class Env(object):
-	# _globalEnv = None
-	
-	# def __init__(self, parent, name = None, init = None):
-		# self.name = name
-		# self.parent = parent
-		
-		# if not parent:
-			# Env._globalEnv = self
-		
-		# if debugEnv:
-			# s = 'NEW ENV %s' % self
-			# this = parent
-			# while this:
-				# s += ' -> %s' % this
-				# this = this.parent
-			# print(s)
-		
-		# self.vars = {}
-		# if parent:
-			# #We copy every entry in parent, unless it's in the global 
-			# #environment, or it's a special compiler name. This is supposed to 
-			# #be an optimization. Creating a new Env takes longer, but looking 
-			# #up a symbol is faster because there are only two places the 
-			# #binding could be (self.vars or Env._globalEnv.vars).
-			# for k, v in parent.vars.items():
-				# if not k in Env._globalEnv.vars:
-					# if not k.name.startswith(' '):		#Names begining with space are magically always local. They are (ab)used by the compiler.
-						# self.vars[k] = v
-						# if debugEnv:
-							# print('\t\tINHERITED %s' % k)
-		
-		# if init:
-			# for k, v in init.items():
-				# self.vars[Sym(k)] = Binding(v)
-	
-	# def get(self, sym):
-		# try:
-			# return self.vars[sym].target
-		# except KeyError:
-			# try:
-				# return Env._globalEnv.vars[sym].target
-			# except KeyError:
-				# raise NameError('Symbol %s not found.' % sym)
-	
-	# def setLocal(self, sym, value):
-		# try:
-			# binding = self.vars[sym]
-		# except:
-			# self.vars[sym] = Binding(value)
-		# else:
-			# binding.target = value
-	
-	# def set(self, sym, value):
-		# try:
-			# binding = self.vars[sym]
-		# except:
-			# try:
-				# binding = Env._globalEnv.vars[sym]
-			# except:
-				# binding = Binding(value)
-				# Env._globalEnv.vars[sym] = binding
-			# else:
-				# binding.target = value
-		# else:
-			# binding.target = value
-	
-	# def __str__(self):
-		# return '%d <%s>' % (id(self), self.name)
-	# def __repr__(self):
-		# return '%d <%s>' % (id(self), self.name)
-	
-	# def dump(self, ignore = {}):
-		# try:
-			# print(
-				# '\t',
-				# id(self),
-				# {k : v.target for k, v in self.vars.items() if not (k in ignore or k.name in ignore)}
-			# )
-		# except Exception as e:
-			# print(self.vars)
-			# raise e
 
 
 import sys
@@ -182,6 +121,11 @@ makeInstClass('Call', 'nargs')
 makeInstClass('Pop')
 makeInstClass('Fn', 'parmList', 'body')
 makeInstClass('Halt')
+
+makeInstClass('Arg')
+makeInstClass('DefArg', 'pos')
+makeInstClass('RestArg')
+makeInstClass('StLocal', 'sym')
 
 #Really?
 makeInstClass('Splice')

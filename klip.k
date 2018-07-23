@@ -35,8 +35,8 @@
 
 
 (assign iterators {
-	~list (fn (s break)
-		(_let i 0 (fn ((value nil))
+	~list (fn (s)
+		(_let i 0 (fn (break (value nil))
 			(if (>= i (len s))
 				(break value))
 			(_let ret (s i)
@@ -44,11 +44,11 @@
 				ret))))
 })
 
-(def iterator (s break)
-	((iterators (type? s)) s break))
+(def iterator (s)
+	((iterators (type? s)) s))
 
-(set iterators ~hash (fn (s break)
-	(iterator (items s) break)))
+(set iterators ~hash (fn (s)
+	(iterator (items s))))
 
 
 (mac rfn (name args (body))				#I don't like the fact that you have to specify a name. But I really don't like anaphora.
@@ -71,10 +71,10 @@
 	(
 		(fn (syms vals)
 			(wcc done
-				(_let it (iterator args done)
+				(_let it (iterator args)
 					(forever
-						(append syms (it))
-						(append vals (it)))))
+						(append syms (it done))
+						(append vals (it done)))))
 			`(
 				(fn (;syms)
 					;body)
@@ -101,9 +101,10 @@
 (def map1 (f l)
 	(_let ret []			#So, this is the ugliest thing in consless Lisp. It's not functional code. But something like (+ [(f (l 0))] (map1 (l [1 t]))) would be slow.
 		(wcc return
-			(_let it (iterator l return)
+			(_let it (iterator l)
 				(forever
-					(append ret (f (it ret))))))))
+					(append ret (f (it return))))))
+		ret))
 
 
 #Short for let-unique. First arg is a symbol or a list of symbols.
@@ -219,9 +220,9 @@
 	(luq (it return _seq)
 		`(let ,_seq ,seq
 			(wcc ,return
-				(let ,it (iterator ,_seq ,return)
+				(let ,it (iterator ,_seq)
 					(forever
-						(let ,x (,it)
+						(let ,x (,it ,return)
 							;body)))))))
 
 (mac eachpair (x y seq (body))
@@ -229,9 +230,9 @@
 		`(let ,_seq ,seq
 			(if
 				(wcc ,return
-					(let ,it (iterator ,_seq ,return)
+					(let ,it (iterator ,_seq)
 						(forever
-							(let (,x (,it nil) ,y (,it t))
+							(let (,x (,it ,return) ,y (,it ,return t))
 								;body))))
 				(prn 'WARNING: eachpair invoked on a sequence with an odd number of elements.')))))
 
@@ -365,12 +366,12 @@
 								(if (list? (temp 0)) temp [temp])))
 						(its
 							(map1
-								(fn (seq) (iterator seq break))
+								(fn (seq) (iterator seq))
 								group)))
 					(forever
 						(append ret (_map
 							f
-							(join (map1 (fn (it) (it)) its) args)
+							(join (map1 (fn (it) (it break)) its) args)
 							rest)))))
 			ret)
 		(apply f args)))

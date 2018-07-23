@@ -114,14 +114,6 @@
 	3
 	4)
 (
-	(fn (x y (rest) last)
-		(prn rest last))
-	1
-	2
-	3
-	4
-	5)
-(
 	(fn all
 		(prn all))
 	'fish'
