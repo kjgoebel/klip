@@ -185,7 +185,6 @@ makeInstClass('Halt')
 
 #Really?
 makeInstClass('Splice')
-makeInstClass('EndCap')
 
 
 def dumpCode(code):

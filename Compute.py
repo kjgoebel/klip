@@ -186,10 +186,6 @@ class Computer(object):
 		self.stack[-1] = SpliceWrapper(tos)
 		self.pos += 1
 	
-	def _endCap(self, nxt):
-		self.stack[-1] = EndCapWrapper(self.stack[-1])
-		self.pos += 1
-	
 	_instTable = {
 		Lit : _lit,
 		Ld : _ld,
@@ -203,7 +199,6 @@ class Computer(object):
 		Fn : _fn,
 		Halt : _halt,
 		Splice : _splice,
-		EndCap : _endCap,
 	}
 
 

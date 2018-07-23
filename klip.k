@@ -99,14 +99,14 @@
 		`(_with (,(xprs 0) ,(xprs 1)) ;(xprs [2 t]))))
 
 (def map1 (f l)
-	(_let ret []			#So, this == the ugliest thing in consless Lisp. It's not functional code. But something like (+ [(f (l 0))] (map1 (l [1 t]))) would be slow.
+	(_let ret []			#So, this is the ugliest thing in consless Lisp. It's not functional code. But something like (+ [(f (l 0))] (map1 (l [1 t]))) would be slow.
 		(wcc return
 			(_let it (iterator l return)
 				(forever
 					(append ret (f (it ret))))))))
 
 
-#Short for let-unique. First arg == a symbol or a list of symbols.
+#Short for let-unique. First arg is a symbol or a list of symbols.
 (mac luq xprs
 	(if (list? (xprs 0))
 		`(
@@ -188,8 +188,8 @@
 				(if ,cond (,temp))))))
 
 #A dowhile that captures the value of the (last expression of the) body. The 
-#given symbol x == bound to that value for the evaluation of the condition. 
-#That value == returned when the condition returns false. (This == for 
+#given symbol x is bound to that value for the evaluation of the condition. 
+#That value is returned when the condition returns false. (This is for 
 #rejection method randomization.)
 (mac xwhile (x cond (body))
 	(luq temp
@@ -262,12 +262,16 @@
 (mac typecase (var (rest))
 	`(case (type? ,var) ;rest))
 
-#Now this == a real loop macro. Accepts both (for <symbol> <evaluates to 
-#number> ...) and (for <slice specifier> ...) forms. That ==,
+#Now this is a real loop macro. Accepts both (for <symbol> <number> ...) and 
+#(for <symbol> <slice specifier> ...) forms. That ==,
 #(for i 3 ...) -> 0, 1, 2
 #(for i [3] ...) -> 0, 1, 2
 #(for i [1 3] ...) -> 1, 2
 #(for i [1 10 2] ...) -> 1, 3, 5, 7, 9
+#Unfortunately, now that there's only one kind of list, there is no decent way 
+#to put a combination in r. (for i (len s) ...) tries to interpret (len s) as a 
+#literal slice specifier. Maybe, just maybe, there should be a different macro 
+#called forn that doesn't take slice specifiers.
 (mac for (i r (body))
 	(if (list? r)
 		(let forfunc
@@ -276,7 +280,7 @@
 					`(let
 						(
 							(,_start ,start ,_stop ,stop ,_step ,step)
-							(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this == why I wanted let to be as general as it ==.
+							(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
 						(while (,op ,i ,_stop)
 							;body
 							(++ ,i ,_step)))))
@@ -286,9 +290,12 @@
 				3 (forfunc i (r 0) (r 1) (r 2) body)))
 		`(for ,i (,r) ;body)))
 
+(mac forlen (i seq (body))
+	`(for ,i ((len ,seq)) ;body))
+
 #PLURALIZE
 #A tool for compounding the effects of macros.
-#old == an existing macro, function or keyword that takes zero or more 
+#old is an existing macro, function or keyword that takes zero or more 
 #parameters. pluralize n creates a macro called new which takes a parameter 
 #array and a body. The new macro peels parameters off the array n at a time 
 #and feeds them to the old macro. The invocations of the old macro are nested, 
@@ -311,6 +318,7 @@
 				`(do ;body)))))
 
 (pluralize 2 for fors)
+(pluralize 2 forlen forlens)
 (pluralize 2 each eaches)
 (pluralize 3 eachpair eachpairs)
 
@@ -331,7 +339,7 @@
 
 
 
-(def ajoin args
+(def join args
 	(let ret[]
 		(each arg args
 			(each sub arg
@@ -362,12 +370,12 @@
 					(forever
 						(append ret (_map
 							f
-							(ajoin (map1 (fn (it) (it)) its) args)
+							(join (map1 (fn (it) (it)) its) args)
 							rest)))))
 			ret)
 		(apply f args)))
 
-#Industrial strength mapping functions. Each group == a dimension in the final 
+#Industrial strength mapping functions. Each group is a dimension in the final 
 #sequence. Each group can be a list, or a list of lists. If it's a list of 
 #lists, each one contributes an argument to f. 
 #So:
