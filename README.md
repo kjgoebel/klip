@@ -5,6 +5,8 @@ Klip currently runs on a virtual machine implemented in Python. Why would anyone
 
 It's nowhere near finished. This paragraph, for example, ends before it's really begun.
 
+The following information is for the master version. I haven't rewritten it for the consless version yet.
+
 ### Special Symbols
 Klip differs from other Lisps in the usage of some symbols. In particular, the shorthand for quote is "~", the shorthand for unquotesplicing is ";", comments are begun with "\#", and strings can be single-quoted. All special symbols are described below.
 
