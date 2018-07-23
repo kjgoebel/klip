@@ -78,10 +78,7 @@ if not hasattr(builtins, '_prefix'):
 			self._hash = None
 			ix = _makeIx(index)
 			ret = self[ix]
-			if value == nil:
-				del self[ix]
-			else:
-				list.__setitem__(self, ix, value)
+			list.__setitem__(self, ix, value)
 			return ret
 		
 		def insert(self, index, value):
@@ -117,13 +114,27 @@ if not hasattr(builtins, '_prefix'):
 			return nil if ret is None else ret
 		return temp
 	
-	for funcName in ['clear', 'extend', 'pop', 'remove']:
+	for funcName in ['clear', 'extend', 'remove']:
 		setattr(KlipList, funcName, (lambda cls = list, name = funcName: _makeWrapperFunc(cls, name))())
 	
 	builtins.KlipList = KlipList
 	
 	class KlipHash(KlipCollection, dict):
+		def __init__(self, *args, **kwargs):
+			dict.__init__(self, *args, **kwargs)
+			self._hash = None
+			for k, v in self.items():
+				if k == nil:
+					raise ValueError('nil cannot be a key in a hash.')
+				if v == nil:
+					raise ValueError('nil cannot be a value in a hash.')
+		
 		def set(self, index, value):
+			if index == nil:
+				raise ValueError('nil cannot be a key in a hash.')
+			
+			self._hash = None
+			
 			try:
 				ret = self[index]
 			except KeyError:
@@ -142,13 +153,15 @@ if not hasattr(builtins, '_prefix'):
 			return '{%s}' % ', '.join(['%s: %s' % (repr(k), repr(v)) for k, v in self.items()])
 		
 		def __hash__(self):
-			return sum(map(hash, self.keys())) + sum(map(hash, self.values()))		#****This is even more horrifically slow!
+			if self._hash is None:
+				self._hash = sum(map(hash, self.keys())) + sum(map(hash, self.values()))		#****This is even more horrifically slow!
+			return self._hash
 	
 	#Redefine all other methods of dict that might change the hash value, so 
 	#that they invalidate _hash.
 	for funcName in ['clear', 'pop', 'popitem', 'update']:
 		#We have to do an absurd dance to deal with the static binding of funcName:
-		setattr(KlipList, funcName, (lambda cls = dict, name = funcName: _makeWrapperFunc(cls, name))())
+		setattr(KlipHash, funcName, (lambda cls = dict, name = funcName: _makeWrapperFunc(cls, name))())
 	
 	builtins.KlipHash = KlipHash
 	

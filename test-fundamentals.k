@@ -80,7 +80,7 @@
 		(f 0)
 		(f 1))
 	(fn (n (test11-x 9))
-		(branch (is n 0)
+		(branch (== n 0)
 			(set-var ~test11-x 4))
 		(prn test11-x)
 		nil))
@@ -93,7 +93,7 @@
 (prn (append a 4))
 (prn a)
 (prn (a [2 t]))
-(prn (set a 2 nil))
+(prn (pop a 2))
 (prn a)
 
 (prn '\tTest 13 HASHES ({one 1 two 2}, 2, 2, nil, 1, {two 2 three 3}:')
@@ -102,7 +102,7 @@
 (prn (len h))
 (prn (h 'two'))
 (prn (set h 'three' 3))
-(prn (set h 'one' nil))
+(prn (pop h 'one'))
 (prn h)
 
 (prn '\tTEST 14 FUNCTION ARGUMENT LISTS ((3 4), (3 4) 5, (fish chips), 1 2, 1 3 (5 7):')

@@ -81,6 +81,9 @@ def _set(env, con, ix, value):
 def _insert(env, con, ix, value):
 	return con.insert(ix, value)
 
+def _pop(env, con, ix = -1):
+	return con.pop(ix)
+
 def _append(env, con, value):
 	return con.append(value)
 
@@ -156,6 +159,7 @@ klipDefaults = {
 	'len' : _len,
 	'set' : _set,
 	'insert' : _insert,
+	'pop' : _pop,
 	'append' : _append,
 	
 	'type?' : _typeq,

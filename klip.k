@@ -163,9 +163,6 @@
 			(,(forms 2) (- ,(forms 1) ,delta))
 			,(forms 1))))
 
-(def pop (con (index -1))
-	(= (con index) nil))
-
 
 
 
@@ -253,7 +250,7 @@
 			(
 				xpdict {}
 				default (if (odd? (len rest))
-					(set rest -1 nil)
+					(pop rest)
 					nil))
 			(eachpair val result rest
 				(set xpdict val `(fn () ,result)))
