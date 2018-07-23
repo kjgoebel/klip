@@ -9,7 +9,7 @@
 	`(assign ,name (fn ,args ;body)))
 
 #Define a crude version of let, because we don't have the machinery for the general version yet.
-#The _ == because this macro isn't intended to be used directly.
+#The _ is because this macro isn't intended to be used directly.
 (mac _let (s v (body))
 	`((fn (,s) ;body) ,v))
 
@@ -52,7 +52,7 @@
 
 
 (mac rfn (name args (body))				#I don't like the fact that you have to specify a name. But I really don't like anaphora.
-	`(_let ,name nil				#This == to keep the binding of name local.
+	`(_let ,name nil				#This is to keep the binding of name local.
 		(assign ,name (fn ,args ;body))
 		,name))
 
