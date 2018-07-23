@@ -47,17 +47,17 @@ def c_branch(env, rest, offset, waiting, tail, qq):
 	
 	return cond + consequent + alternative
 
-def c_assign(env, rest, offset, waiting, tail, qq):
-	ret = c_xpr(env, rest[1], offset, True, False, qq)
-	ret.append(St(rest[0]))
-	return _finish(ret, Ld(rest[0]), waiting, tail)
+# def c_assign(env, rest, offset, waiting, tail, qq):
+	# ret = c_xpr(env, rest[1], offset, True, False, qq)
+	# ret.append(St(rest[0]))
+	# return _finish(ret, Ld(rest[0]), waiting, tail)
 
 def c_fn(env, rest, offset, waiting, tail, qq):
 	parmList = rest[0]
 	if isa(parmList, Sym):
 		parmList = KlipList([_cont, KlipList([parmList])])		#Man, this is ugly. And slow.
 	else:
-		parmList.insert(0, _cont)
+		parmList = [_cont] + parmList
 	return _finish([], Fn(parmList, rest[1:]), waiting, tail)
 
 def c_ccc(env, rest, offset, waiting, tail, qq):
@@ -117,7 +117,7 @@ def c_halt(env, rest, offset, waiting, tail, qq):
 _specialTable = {
 	'branch' : c_branch,
 	'fn' : c_fn,
-	'assign' : c_assign,
+	#'assign' : c_assign,
 	'ccc' : c_ccc,
 	'quote' : c_quote,
 	'quasiquote' : c_quasiquote,
@@ -170,6 +170,9 @@ def c_hash(env, xpr, offset, waiting, tail, qq):
 
 def c_qq(env, xpr, offset, waiting, tail, qq):
 	if isa(xpr, KlipList):
+		if not len(xpr):
+			return [Lit(xpr)]
+		
 		head = xpr[0]
 		
 		if head == Sym('unquote'):
@@ -268,7 +271,7 @@ def _doComp(env, body):
 		print('COMPILING', body)
 	try:
 		ret = c_body(env, body, 0, True, True, 0)
-	except CompileError as e:
+	except Exception as e:
 		print('ERROR WHILE COMPILING:\n', body)
 		raise e
 	if debugCompile:
@@ -304,7 +307,7 @@ def compFile(env, tree, offset = 0, main = True):
 				code.append(Fn(_contList, KlipList([xpr])))
 				code.append(Cont(_retList, len(code) + 2))
 				code.append(Call(1, notes = 'compFile'))
-		except CompileError as e:
+		except Exception as e:
 			print('ERROR WHILE COMPILING TOPLEVEL XPR:\n', xpr)
 			raise e
 	if main:
@@ -320,7 +323,7 @@ def compMacro(env, tree):
 	try:
 		code = c_body(env, tree, 0, True, False, 0)
 		code.append(Halt())
-	except CompileError as e:
+	except Exception as e:
 		print('ERROR WHILE COMPILING MACRO:\n', tree)
 		raise e
 	if debugCompile:

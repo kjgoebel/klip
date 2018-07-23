@@ -144,6 +144,7 @@ class Computer(object):
 		self._doCall(lf, args)
 	
 	def _doCall(self, lf, args):
+		args = list(flatten(args))
 		if callable(lf):
 			func = lf
 			lf = args.pop(0)
@@ -182,10 +183,7 @@ class Computer(object):
 	
 	def _splice(self, nxt):
 		tos = self.stack[-1]
-		if tos == nil:
-			self.stack[-1] = SpliceWrapper()
-		else:
-			self.stack[-1] = SpliceWrapper(tos)
+		self.stack[-1] = SpliceWrapper(tos)
 		self.pos += 1
 	
 	def _endCap(self, nxt):

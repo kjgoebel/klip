@@ -20,6 +20,24 @@ def _rprn(env, *args):
 	return nil
 
 
+#Note: This assignment nonsense is the only reason why Computer passes environments to literal callables.
+def _getSafe(env, name):
+	try:
+		return env.get(name)
+	except:
+		return nil
+
+def _setVar(env, name, value):
+	env.set(name, value)
+	return nil
+
+
+def _no(env, arg):
+	if klipFalse(arg):
+		return t
+	return nil
+
+
 
 def _list(env, *args):
 	return KlipList(flatten(args))
@@ -48,7 +66,7 @@ def _items(env, con):
 	if isa(con, KlipList):
 		return con[:]
 	elif isa(con, KlipHash):
-		return KlipList([Cons(k, v) for k, v in con.items()])
+		return KlipList([KlipList([k, v]) for k, v in con.items()])
 	elif isa(con, KlipStr):
 		return KlipList([x for x in con])
 	else:
@@ -125,6 +143,11 @@ klipDefaults = {
 	
 	'prn' : _prn,
 	'rprn' : _rprn,
+	
+	'get-safe' : _getSafe,
+	'set-var' : _setVar,
+	
+	'no' : _no,
 	
 	'list' : _list,
 	'hash' : _hash,

@@ -51,17 +51,12 @@ if not hasattr(builtins, '_prefix'):
 				item = self[args[0]]
 			except IndexError:
 				return nil
+			except KeyError:
+				return nil
 			
 			if len(args) > 1:
-				return item(env, args[1:])
+				return item(env, *args[1:])
 			return item
-		
-		def __hash__(self):
-			return id(self)
-		def __eq__(self, other):
-			return id(self) == id(other)
-		def __neq__(self, other):
-			return id(self) != id(other)
 	
 	def _makeIx(ix):
 		if isa(ix, KlipList):
@@ -69,6 +64,10 @@ if not hasattr(builtins, '_prefix'):
 		return ix
 	
 	class KlipList(KlipCollection, list):
+		def __init__(self, *args, **kwargs):
+			list.__init__(self, *args, **kwargs)
+			self._hash = None
+		
 		def __getitem__(self, index):
 			ret = list.__getitem__(self, _makeIx(index))
 			if type(ret) == list:
@@ -76,6 +75,7 @@ if not hasattr(builtins, '_prefix'):
 			return ret
 		
 		def set(self, index, value):
+			self._hash = None
 			ix = _makeIx(index)
 			ret = self[ix]
 			if value == nil:
@@ -85,10 +85,12 @@ if not hasattr(builtins, '_prefix'):
 			return ret
 		
 		def insert(self, index, value):
+			self._hash = None
 			list.insert(self, index, value)
 			return nil
 		
 		def append(self, value):
+			self._hash = None
 			list.append(self, value)
 			return nil
 		
@@ -96,6 +98,28 @@ if not hasattr(builtins, '_prefix'):
 			return '(%s)' % ' '.join([str(x) for x in self])
 		def __repr__(self):
 			return '(%s)' % ' '.join([repr(x) for x in self])
+		
+		def __hash__(self):
+			if self._hash is None:
+				self._hash = sum(map(hash, self))			#****This is horrifically slow!
+			return self._hash
+	
+	#Redefine all other methods of list that might change the hash value, so 
+	#that they invalidate _hash.
+	#reverse and sort don't actually change the hash value.
+	
+	#We have to do an absurd dance to get around the static binding of 
+	#funcName in the loop below:
+	def _makeWrapperFunc(cls, name):
+		def temp(self, *args, **kwargs):
+			self._hash = None
+			ret = getattr(cls, name)(self, *args, **kwargs)
+			return nil if ret is None else ret
+		return temp
+	
+	for funcName in ['clear', 'extend', 'pop', 'remove']:
+		setattr(KlipList, funcName, (lambda cls = list, name = funcName: _makeWrapperFunc(cls, name))())
+	
 	builtins.KlipList = KlipList
 	
 	class KlipHash(KlipCollection, dict):
@@ -116,6 +140,16 @@ if not hasattr(builtins, '_prefix'):
 			return '{%s}' % ' '.join(['%s %s' % (k, v) for k, v in self.items()])
 		def __repr__(self):
 			return '{%s}' % ', '.join(['%s: %s' % (repr(k), repr(v)) for k, v in self.items()])
+		
+		def __hash__(self):
+			return sum(map(hash, self.keys())) + sum(map(hash, self.values()))		#****This is even more horrifically slow!
+	
+	#Redefine all other methods of dict that might change the hash value, so 
+	#that they invalidate _hash.
+	for funcName in ['clear', 'pop', 'popitem', 'update']:
+		#We have to do an absurd dance to deal with the static binding of funcName:
+		setattr(KlipList, funcName, (lambda cls = dict, name = funcName: _makeWrapperFunc(cls, name))())
+	
 	builtins.KlipHash = KlipHash
 	
 	class KlipStr(str):
