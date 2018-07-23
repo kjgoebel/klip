@@ -63,10 +63,15 @@ class Computer(object):
 		self.stack.pop()
 		self.pos += 1
 	
+	#****This sharing of duty between Computer and Env is not good.
 	def _arg(self, nxt):
 		if debugTrace:
 			self.env.dump(klipDefaults)
-		self.stack.append(self.env.arg())
+		try:
+			temp = self.env.arg()
+		except IndexError:
+			raise MachineError('%s %s' % (nxt.message, self.env.args))
+		self.stack.append(temp)
 		self.pos += 1
 	
 	def _defArg(self, nxt):
@@ -83,6 +88,11 @@ class Computer(object):
 		if debugTrace:
 			self.env.dump(klipDefaults)
 		self.stack.append(self.env.restArg())
+		self.pos += 1
+	
+	def _noArgsLeft(self, nxt):
+		if self.env.argPos < len(self.env.args):
+			raise MachineError('%s %s' % (nxt.message, self.env.args))
 		self.pos += 1
 	
 	def _stLocal(self, nxt):
@@ -178,6 +188,7 @@ class Computer(object):
 		Arg : _arg,
 		DefArg : _defArg,
 		RestArg : _restArg,
+		NoArgsLeft : _noArgsLeft,
 		StLocal : _stLocal,
 		
 		Splice : _splice,

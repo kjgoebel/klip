@@ -1,12 +1,9 @@
+(include 'klip.k')
 
+(def blah (x y)
+	(prn x y))
 
-(set-var ~x 1)
-(set-var ~y 1)
-
-(prn x y)
-
-(set-var ~y 3)
-(prn x y)
+(blah 1 2 3)
 
 
 

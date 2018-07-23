@@ -122,9 +122,10 @@ makeInstClass('Pop')
 makeInstClass('Fn', 'parmList', 'body')
 makeInstClass('Halt')
 
-makeInstClass('Arg')
+makeInstClass('Arg', 'message')
 makeInstClass('DefArg', 'pos')
 makeInstClass('RestArg')
+makeInstClass('NoArgsLeft', 'message')
 makeInstClass('StLocal', 'sym')
 
 #Really?

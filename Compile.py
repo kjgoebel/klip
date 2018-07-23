@@ -74,12 +74,12 @@ def c_ccc(env, rest, offset, waiting, tail, qq):
 	
 	ret += [
 		Call(2),
-		Arg(),			#Explicit call of cc lands here...
-		Pop(),			#and the user continuation is discarded.
+		Arg('Missing dummy argument.'),		#Explicit call of cc lands here...
+		Pop(),								#and the user continuation is discarded.
 	]
 	
 	#Regular return of user function lands here.
-	return _finish(ret, Arg(), waiting, tail)
+	return _finish(ret, Arg('Missing return value.'), waiting, tail)
 
 def c_quote(env, rest, offset, waiting, tail, qq):
 	return _finish([], Lit(rest[0]), waiting, tail)
@@ -108,7 +108,7 @@ def c_apply(env, rest, offset, waiting, tail, qq):
 	ret.append(Splice())
 	ret.append(Call(2))
 	temp.pos = offset + len(ret)
-	return _finish(ret, Arg(), waiting, tail)
+	return _finish(ret, Arg('Missing return value.'), waiting, tail)
 
 def c_halt(env, rest, offset, waiting, tail, qq):
 	return [Halt()]
@@ -166,7 +166,7 @@ def c_hash(env, xpr, offset, waiting, tail, qq):
 		ret += c_xpr(env, v, offset + len(ret), True, False, qq)
 	ret.append(Call(2 * len(xpr) + 1))
 	temp.pos = offset + len(ret)
-	return _finish(ret, Arg(), waiting, tail)
+	return _finish(ret, Arg('Missing return value.'), waiting, tail)
 
 
 def c_qq(env, xpr, offset, waiting, tail, qq):
@@ -196,7 +196,7 @@ def c_qq(env, xpr, offset, waiting, tail, qq):
 			ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
 		ret.append(Call(len(xpr) + 1))
 		temp.pos = offset + len(ret)
-		return _finish(ret, Arg(), waiting, tail)
+		return _finish(ret, Arg('Missing return value.'), waiting, tail)
 	
 	if isa(xpr, KlipHash):
 		return c_hash(env, xpr, offset, waiting, tail, qq)
@@ -240,7 +240,7 @@ def c_list(env, xpr, offset, waiting, tail, qq):
 		ret.append(Call(len(xpr)))
 		temp.pos = offset + len(ret)
 		if waiting:
-			ret.append(Arg())
+			ret.append(Arg('Missing return value.'))
 	return ret
 
 
@@ -280,9 +280,10 @@ def c_parms(env, parmList):
 					temp.pos = len(ret)
 					ret.append(StLocal(parm[0]))
 			else:
-				ret += [Arg(), StLocal(parm)]
+				ret += [Arg('Missing argument. %s' % parmList), StLocal(parm)]
 	else:
 		ret += [RestArg(), StLocal(parmList)]
+	ret.append(NoArgsLeft('Too many arguments. %s' % parmList))
 	return ret
 
 
