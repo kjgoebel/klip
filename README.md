@@ -5,57 +5,51 @@ Klip currently runs on a virtual machine implemented in Python. Why would anyone
 
 It's nowhere near finished. This paragraph, for example, ends before it's really begun.
 
-The following information is for the master version. I haven't rewritten it for the consless version yet.
+Some major features of Klip:
+* Klip doesn't use cons cells. Lists are implemented as arrays, and they are accessed with indices. (E.g. `(a 1)` is the second element in the list `a`.)
+* The language itself is very small. Most of what makes Klip Klip is in the core library, `klip.k`.
 
 ### Special Symbols
 Klip differs from other Lisps in the usage of some symbols. In particular, the shorthand for quote is "~", the shorthand for unquotesplicing is ";", comments are begun with "\#", and strings can be single-quoted. All special symbols are described below.
 
 |character(s)|use|
 |---|:---|
-|`( )`|literal cons list|
-|`[ ]`|literal array|
-|`{ }`|literal hash|
+|`( )`|a list|
+|`[ ]`|`[1 2 3]` is shorthand for `(list 1 2 3)`|
+|`{ }`|literal hash table|
 |`~`|`~x` is shorthand for `(quote x)`|
 |``` ` ```|``` `x ``` is shorthand for `(quasiquote x)`|
 |`,`|`,x` is shorthand for `(unquote x)`|
 |`;`|`;x` is shorthand for `(unquotesplicing x)`|
-|`.`|`(1 2 . 3)` is an improper list whose last cons has a cdr of 3 rather than `nil`.|
 |`'`|`'blah'` is a literal string|
 |`"`|`"can't"` is a literal string|
 |`#`|begins a rest-of-line comment|
 
 ### Special Forms
 #### ```(branch <conditional> <consequent> [<alternative>])```
-The branch form is used exactly six times in Klip. That's how many it takes to write the vastly more powerful ```if``` macro.
+The branch form is used exactly six times in Klip. That's how many it takes to write the vastly more powerful ```if``` macro (see below).
 
 #### ```(fn <parameter list> <body of zero or more expressions>)```
 Lambda is spelled ```fn``` in Klip.
 
-Parameter lists can be improper:
-
-```(fn (x . rest) ...)``` -> The name `x` will refer to the first argument, and rest will refer to a cons list of the remaining arguments.
-
-```(fn args ...)``` -> The name `args` will refer to all of the arguments.
-
-Parameter lists can contain cons lists and arrays:
+Parameter lists can contain lists:
 
 ```(fn (n (acc 1)) ...)``` -> `acc` will be given a default value of 1 if the function is called with fewer than two arguments. *At the moment, default parameters are copied literally by the compiler, so only numbers, strings and unquoted symbols will work.*
 
-```(fn (x (args) y) ...)``` -> `x` will be given the value of the first argument, `y` the value of the last argument and 'args' the values of all the arguments in between, in a cons list.
+```(fn (x (args) y) ...)``` -> `x` will be given the value of the first argument, `y` the value of the last argument and 'args' the values of all the arguments in between, in a list.
 
-```(fn (x [args] y) ...)``` -> Same as above, but `args` will collect the arguments in an array.
+The entire parameter list can be a symbol:
 
-#### ```(assign <symbol> <expression>)```
-My intention is to implement something resembling Arc's = macro. That's why I chose the name ```assign``` instead of something shorter and better.
+```(fn args ...)``` -> The name `args` will be a list of all the arguments.
 
 #### ```(ccc <function of one parameter>)```
-Stands for Call with Current Continuation. It calls the function, passing it the current continuation. This is a first-order continuation that can be called more than once and from outside the `ccc` form.
+Stands for Call with Current Continuation. It calls the function, passing it the current continuation. This is a first-order continuation that can be called more than once and from outside the `ccc` form. The value of the `ccc` form is either the return value of the given function or the value passed to the continuation when it's called.
 
 #### ```(mac <name> <argument list> <body of zero or more expressions>)```
-Creates a macro. Klip uses good, old-fashioned unhygienic macros. This form defines a function with the given arugment list and body. From now on, when the compiler finds an expression whose head is equal to `name`, it will call this function on the rest of the expression, and compile the return value of that function instead of the original expression.
+Creates a macro. Klip uses good, old-fashioned unhygienic macros. This form defines a function with the given arugment list and body. From now on, when the compiler finds an expression whose head is equal to `name`, it will call this function on the rest of the expression, and compile the return value of that function instead of the original expression. The value of the `mac` form is `nil`.
 
 #### ```(apply <function> <argument list>)```
-Applies the given function to the given arguments. The argument list can be a cons list or an array.
+The given function is called with the given list as its arguments. The value of the `apply` form is the return value of that function.
 
 #### ```(include <file name>)```
 Behaves as if all the expressions in the specified file were inserted in this file here. Only valid at the toplevel.
@@ -66,90 +60,100 @@ Stops the virtual machine.
 #### `(quote x)`, `(quasiquote x)`, `(unquote x)`, `(unquotesplicing x)`
 These all work the way you'd expect.
 
-### Containers
-Now it gets a little weird. I wanted to create a Lisp where arrays and hash tables were fundamental objects that could be parts of programs. I wanted to get away from the weird obsession that Lisp programmers have traditionally had with using linked lists as arrays. They're not arrays, and using them as such is a disaster. I also wanted to do this without cluttering up the built-in namespace with garbage like "array-ref", "array-set" etc. So I opted for making arrays and hash tables callable. (This is reminiscent of, but different from what Arc does.)
+### Other Key Features of Klip
+#### Containers
+Lists and hash tables are containers. Lists are not made of cons cells in Klip. They are arrays, and their contents are accessed with indices and slices. Hash tables are fundamental objects in Klip, and as such they can be contained in programs.
 
-(It is worth noting that one could create a Lisp without conses at all. The control macros would look really weird, but it would be quite doable.)
+A literal hash table looks like this:
 
-There are two container types, `array` and `hash`. Unlike all other types (`cons`, `str`, `int`, `float`, `sym` and `func`), they are mutable. They are considered atoms by functions like `list?`. They can be part of a Klip program like any other type (except `func`). A litteral array is written like this:
+```{a b c d ...}```
 
-`[a b c ...]`
+In this example, the key `a` is associated with the value `b`, `c` with `d`, etc.
 
-and a literal hash table like this
+Brackets are used as a shorthand to create literal lists:
 
-`{a b c d ...}`
+```[a b c ...]``` -> Equivalent to ```(list a b c ...)```
 
-When a literal container is evaluated, its contents are evaluated, so `[(+ 3 4) 5 6]` evaluates to `[7 5 6]`. The expressions in a hash are key/value pairs. In the example above, `a` is associated with `b`, `c` with `d`, etc. There must be an even number of expressions. `unquotesplicing` works with arrays, but not with hashes.
+*Empty containers are false in Klip!*
 
-There is a gotcha with containers. Conses have to be immutable (and hashable, in the Python sense) so that they can be keys in hashes. Conses also have to be able to contain arrays and hashes, so that arrays and hashes can be part of programs. So, despite being immutable, conses can contain mutable objects. In a certain sense, the value of a cons can change (if the array it contains is changed) but it's still considered immutable. The equality test for conses uses the identity, rather than the value, of any mutable objects it contains. Thus,
+The contents of a container are accessed by calling it:
+
+```(a 4)``` -> Returns the fifth element in the list `a`.
+
+```(h 'fish')``` -> Returns the value in `h` associated with the key `'fish'`.
+
+Container lookups are recursive:
+
+```(a 4 2)``` -> ```((a 4) 2)```
+
+The contents of a container can be changed with `set`:
+
+```(set h 'three' 3)``` -> Associates the key 'three' with the value 3 in the hash table `h`. Any previous value of `(h 'three')` is overwritten.
+
+#### The `if` Macro
+This is similar to the `cond` form in some Lisp dialects and the `if` macro in Arc.
+
+```(if)``` -> `nil`
+
+```(if a)``` -> `a` if `a` is true, otherwise `nil`
+
+```(if a b ...)``` -> `b` if `a` is true, otherwise `(if ...)`
+
+#### The `=` Macro
+This is similar to the `=` macro in Arc. It is used to assign values to "places", which are generalized variables.
+
+```(= place val)``` -> Evaluating `place` should now yield the value `val`.
+
+The `=` macro deconstructs `place` to determine what it needs to do to make `place` evaluate to `val`. `place` can be a simple symbol:
+
+```(= x 1)``` -> Assigns `x` the value 1.
+
+But place can be more complicated:
+
+```(= (a 0) 2)``` -> Assigns the value 1 to the first element of the list `a`.
+
+A very important feature of the `=` macro is that, unlike assignment in most programming languages, *the value of the `=` form itself is the original value of `place`, not the new value.* So,
+
 ```
-(assign x (list [2 3]))
-(assign y (list [2 3]))
-(prn
-	(== (car x) (car y))
-	(== (cdr x) (cdr y))
-	(== x y))
+(= x 1)
+(prn (= x 2))
 ```
-prints `t t nil` NOT `t t t`. Both arrays have the same value `[2 3]`, and they are thus equal. But they are different arrays, so the conses containing them are not equal. Two conses are not equal unless they have the same value and are guaranteed to always have the same value. For less surprising comparison, use `iso`.
 
-The contents of a container are accessed by indices. The indices of an array are consecutive integers starting with zero. The indices of a hash can be any immutable object except `nil`. Containers can contain any object except `nil`. *At the moment, the prohibitions against `nil` are very poorly error-checked, but they will cause your program to explode. Just, like, don't do it man.*
+prints 1, not 2. Variables that haven't been created yet have a "previous value" of `nil`.
 
-Containers are functions on their contents. If a container is called with zero arguments
+```(prn (= y 1))``` -> Prints `nil`, assuming that `y` doesn't exist previously.
 
-`(a)` -> len(a)
+The `=` form can have more than two argument expressions.
 
-the number of items is returned. The number of items in a hash is the number of key/value pairs. If the container is called with one argument,
+```(= x y z)``` -> Assigns `x` the value of `y`, `y` the value of `z`, and returns the original value of `x`.
 
-`(a 1)` -> a[1]
+This means that swapping and rotating of values can be accomplished with the `=` macro:
 
-the item associated with that index is returned. If the function is called with two arguments,
+```(= x y x)``` -> Swaps the values of `x` and `y`.
 
-`(a 3 'fish')` -> a[3] = 'fish'
+#### The `let` Macro
+Klip's `let` macro is very general. It can be used to create a single variable:
 
-the contents of the container are updated. If the second argument is `nil`,
+```(let x 5 (prn x))``` -> Prints 5.
 
-`(a 2 nil)` -> a.pop(2)
+With an additional set of parentheses, it can be used to create several variables at once:
 
-the item at the given index is removed and returned. If the container is an array, items after the given index move down to fill the vacated space.
+```(let (x 5 y 10) (prn (* x y)))``` -> Prints 50.
 
-If the container is an array, there are two more possibilities. If the second argument is `nil` and there is a third argument,
+And with yet another set of parentheses, it can create variables in multiple stages, so that values assigned in later stages can depend on the variables created in earlier stages:
 
-`(a 4 nil 'chips')` -> a.insert(4, 'chips')
+```
+(let
+	(
+		(x 5)
+		(y 6 z (* 2 x)))
+	(prn x y z))
+```
+prints 5 6 10. This is just a nested `let` form without having to write `let` multiple times.
 
-the third argument is inserted into the array at the given index, and items there and after move up to make room. Finaly, with an array, the first argument can be `nil`:
+#### String Formatting
+This is accomplished by calling the string:
 
-`(a nil 5)` -> a.append(5)
+```('We have %05d fish on hand.' 33)``` -> `'We have 00033 fish on hand.'`
 
-In this case, the second argument is appended to the end of the array.
-
-Array indices can be more interesting. Klip supports negative indices, as in Python:
-
-`(a -1)` -> a[-1] (the last element in `a`)
-
-`(a -2 3)` -> a[-2] = 3
-
-Slices can also be specified by using a literal array:
-
-`(a [2 4])` -> a[2:4]
-
-`(a [2 3] ['x' 'y'])` -> a[2:4] = ['x', 'y']
-
-Missing ends of the slice are represented with t:
-
-`(a [2 t])` -> a[2:]
-
-As in Python, slice specifiers can have length of one, two or three. The three signatures are [start], [start stop] and [start stop step].
-
-Strings can also be considered functions, similar to containers. The items contained in a string are characters, which are themselves strings of length 1, as in Python. Strings are immutable, so they don't support item assignment. They are indexed by integers starting with zero.
-
-`(s)` -> len(s)
-
-`(s 3)` -> s[3]
-
-`(s [t -1])` -> s[:-1]
-
-String formatting is accomplished by calling a string and passing `nil` for the first parameter.
-
-`(s nil a b c)` -> s % (a, b, c)
-
-Klip uses (through Python) the C format specifiers, because no superior method for string formatting has yet been devised by man.
+Klip uses (through Python) the C string format specifiers, because no superior method for string formatting has yet been devised by man.
