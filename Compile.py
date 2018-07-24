@@ -4,8 +4,6 @@ from Preprocess import preprocess
 from Tokenize import tokenize
 from Parse import parse
 
-import inspect
-
 
 
 class CompileError(Exception):
@@ -31,12 +29,12 @@ def _finish(ret, cap, waiting, tail):
 	return ret
 
 
-def c_branch(env, rest, offset, waiting, tail, qq):
-	cond = c_xpr(env, rest[0], offset, True, False, qq)
-	consequent = c_xpr(env, rest[1], offset + len(cond) + 1, waiting, tail, qq)
+def c_branch(env, rest, offset, waiting, tail):
+	cond = c_xpr(env, rest[0], offset, True, False)
+	consequent = c_xpr(env, rest[1], offset + len(cond) + 1, waiting, tail)
 	
 	if len(rest) > 2:
-		alternative = c_xpr(env, rest[2], offset + len(cond) + len(consequent) + 2, waiting, tail, qq)
+		alternative = c_xpr(env, rest[2], offset + len(cond) + len(consequent) + 2, waiting, tail)
 		consequent.append(Jmp(len(alternative)))
 	else:
 		alternative = _finish([], Lit(nil), waiting, tail)
@@ -47,12 +45,12 @@ def c_branch(env, rest, offset, waiting, tail, qq):
 	
 	return cond + consequent + alternative
 
-# def c_assign(env, rest, offset, waiting, tail, qq):
-	# ret = c_xpr(env, rest[1], offset, True, False, qq)
+# def c_assign(env, rest, offset, waiting, tail):
+	# ret = c_xpr(env, rest[1], offset, True, False)
 	# ret.append(St(rest[0]))
 	# return _finish(ret, Ld(rest[0]), waiting, tail)
 
-def c_fn(env, rest, offset, waiting, tail, qq):
+def c_fn(env, rest, offset, waiting, tail):
 	parmList = rest[0]
 	if isa(parmList, Sym):
 		parmList = KlipList([_cont, KlipList([parmList])])		#Man, this is ugly. And slow.
@@ -60,57 +58,63 @@ def c_fn(env, rest, offset, waiting, tail, qq):
 		parmList = KlipList([_cont] + parmList)					#This is also ugly and slow.
 	return _finish([], Fn(parmList, rest[1:]), waiting, tail)
 
-def c_ccc(env, rest, offset, waiting, tail, qq):
-	ret = c_xpr(env, rest[0], offset, True, False, qq)
+def c_ccc(env, rest, offset, waiting, tail):
+	ret = c_xpr(env, rest[0], offset, True, False)
 	
 	#This is the continuation that will be invoked by the tail of the user 
 	#function if it returns normally.
-	ret.append(Cont(_retList, offset + len(ret) + 5))
+	normalCont = Cont(_retList, 'Dummy value. See below.')
+	ret.append(normalCont)
 	
 	#This is the continuation that will be invoked if the user function 
 	#explicitly calls it. The _dummy is the continuation back to user code 
 	#which will never be called.
-	ret.append(Cont(KlipList([_dummy, _ret]), offset + len(ret) + 2, 2))
+	userCont = Cont(KlipList([_dummy, _ret]), 'Dummy value. See below.', 2)			#Remove the user function and the normal continuation from the saved stack.
+	ret.append(userCont)
 	
+	ret.append(Call(2))
+	
+	#Explicit call of cc lands here...
+	userCont.pos = offset + len(ret)
 	ret += [
-		Call(2),
-		Arg('Missing dummy argument.'),		#Explicit call of cc lands here...
+		Arg('Missing dummy argument.'),
 		Pop(),								#and the user continuation is discarded.
 	]
 	
 	#Regular return of user function lands here.
+	normalCont.pos = offset + len(ret)
 	return _finish(ret, Arg('Missing return value.'), waiting, tail)
 
-def c_quote(env, rest, offset, waiting, tail, qq):
+def c_quote(env, rest, offset, waiting, tail):
 	return _finish([], Lit(rest[0]), waiting, tail)
 
-def c_quasiquote(env, rest, offset, waiting, tail, qq):
-	return c_xpr(env, rest[0], offset, waiting, tail, qq + 1)
+def c_quasiquote(env, rest, offset, waiting, tail):
+	return c_xpr(env, rest[0], offset, waiting, tail, 1)
 
-def c_unquote(env, rest, offset, waiting, tail, qq):
+def c_unquote(env, rest, offset, waiting, tail):
 	raise CompileError('unquote is undefined at quote level 0.')
 
-def c_unquotesplicing(env, rest, offset, waiting, tail, qq):
+def c_unquotesplicing(env, rest, offset, waiting, tail):
 	raise CompileError('unquotesplicing is undefined at quote level 0.')
 
-def c_mac(env, rest, offset, waiting, tail, qq):
+def c_mac(env, rest, offset, waiting, tail):
 	name = rest[0]
 	parmList = rest[1]
 	body = rest[2:]
 	_allMacros[name] = parmList, compMacro(env, body, parmList)
 	return _finish([], Lit(nil), waiting, tail)
 
-def c_apply(env, rest, offset, waiting, tail, qq):
-	ret = c_xpr(env, rest[0], offset, True, False, qq)
+def c_apply(env, rest, offset, waiting, tail):
+	ret = c_xpr(env, rest[0], offset, True, False)
 	temp = Cont(_retList, 'Dummy value. See below.')
 	ret.append(temp)
-	ret += c_xpr(env, rest[1], offset + len(ret), True, False, qq)
+	ret += c_xpr(env, rest[1], offset + len(ret), True, False)
 	ret.append(Splice())
 	ret.append(Call(2))
 	temp.pos = offset + len(ret)
 	return _finish(ret, Arg('Missing return value.'), waiting, tail)
 
-def c_halt(env, rest, offset, waiting, tail, qq):
+def c_halt(env, rest, offset, waiting, tail):
 	return [Halt()]
 
 
@@ -157,7 +161,7 @@ def getAllMacros():
 	return _allMacros
 
 
-def c_hash(env, xpr, offset, waiting, tail, qq):
+def c_hash(env, xpr, offset, waiting, tail, qq = 0):
 	ret = [Ld(Sym('hash'))]
 	temp = Cont(_retList, 'Dummy value. See below.')
 	ret.append(temp)
@@ -204,17 +208,17 @@ def c_qq(env, xpr, offset, waiting, tail, qq):
 	return [Lit(xpr)]
 
 
-def c_body(env, xpr, offset, waiting, tail, qq):
+def c_body(env, xpr, offset, waiting, tail):
 	if not xpr:
 		return _finish([], Lit(nil), waiting, tail)
 	ret = []
 	for sub in xpr[:-1]:
-		ret += c_xpr(env, sub, offset + len(ret), False, False, qq)
-	ret += c_xpr(env, xpr[-1], offset + len(ret), waiting, tail, qq)
+		ret += c_xpr(env, sub, offset + len(ret), False, False)
+	ret += c_xpr(env, xpr[-1], offset + len(ret), waiting, tail)
 	return ret
 
 
-def c_list(env, xpr, offset, waiting, tail, qq):
+def c_list(env, xpr, offset, waiting, tail):
 	head = xpr[0]
 	rest = xpr[1:]
 	
@@ -222,21 +226,21 @@ def c_list(env, xpr, offset, waiting, tail, qq):
 	if isa(head, Sym):
 		f = _specialTable.get(head.name, None)
 		if f:
-			return f(env, rest, offset, waiting, tail, qq)
+			return f(env, rest, offset, waiting, tail)
 	
 	#ordinary combination:
 	if tail:
-		ret = c_xpr(env, head, offset, True, False, qq)
+		ret = c_xpr(env, head, offset, True, False)
 		ret.append(Ld(_cont))
 		for sub in xpr[1:]:
-			ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
+			ret += c_xpr(env, sub, offset + len(ret), True, False)
 		ret.append(Call(len(xpr)))			#-1 for the fn itself, +1 for the continuation.
 	else:
-		ret = c_xpr(env, xpr[0], offset, True, False, qq)
+		ret = c_xpr(env, xpr[0], offset, True, False)
 		temp = Cont(_retList, 'Dummy value. See below.')
 		ret.append(temp)
 		for sub in rest:
-			ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
+			ret += c_xpr(env, sub, offset + len(ret), True, False)
 		ret.append(Call(len(xpr)))
 		temp.pos = offset + len(ret)
 		if waiting:
@@ -250,7 +254,7 @@ _xprTable = {
 }
 
 
-def c_xpr(env, xpr, offset, waiting, tail, qq):
+def c_xpr(env, xpr, offset, waiting, tail, qq = 0):
 	if qq:
 		return c_qq(env, xpr, offset, waiting, tail, qq)
 	
@@ -258,7 +262,7 @@ def c_xpr(env, xpr, offset, waiting, tail, qq):
 	
 	f = _xprTable.get(type(xpr), None)
 	if f:
-		return f(env, xpr, offset, waiting, tail, qq)
+		return f(env, xpr, offset, waiting, tail)
 	
 	if isa(xpr, Sym):
 		return _finish([], Ld(xpr), waiting, tail)
@@ -295,7 +299,7 @@ def _doComp(env, body, parmList):
 		print('COMPILING', body)
 	try:
 		ret = c_parms(env, parmList)
-		ret += c_body(env, body, len(ret), True, True, 0)
+		ret += c_body(env, body, len(ret), True, True)
 	except Exception as e:
 		print('ERROR WHILE COMPILING:\n', body)
 		raise e
@@ -347,7 +351,7 @@ def compMacro(env, tree, parmList):
 		print('COMPILING MACRO', id(env), tree)
 	try:
 		code = c_parms(env, parmList)
-		code += c_body(env, tree, len(code), True, False, 0)
+		code += c_body(env, tree, len(code), True, False)
 		code.append(Halt())
 	except Exception as e:
 		print('ERROR WHILE COMPILING MACRO:\n', tree)

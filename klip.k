@@ -118,6 +118,15 @@
 			(uniq))))
 
 
+(assign place-table {})
+
+(mac def-place (name xpr-name (body))
+	(luq xpr
+		`(set place-table ~,name
+			(fn (,xpr)
+				(let ,xpr-name (,xpr [1 t])
+					;body)))))
+
 
 (def =forms (place)
 	(if
@@ -130,15 +139,18 @@
 					(set-var ~,place ,newx))])
 		
 		(== (type? place) ~list)
-		(luq (oldx newx)
-			[
-				[oldx place]
-				oldx
-				`(fn (,newx)
-					,(if (> (len place) 2)
-						`(set ,(place [t -1]) ,(place -1) ,newx)
-						`(set ,(place 0) ,(place 1) ,newx)))])))
-		
+		(let form-func (place-table (place 0))
+			(if form-func
+				(form-func place)
+				(luq (oldx newx)
+					[
+						[oldx place]
+						oldx
+						`(fn (,newx)
+							,(if (> (len place) 2)
+								`(set ,(place [t -1]) ,(place -1) ,newx)
+								`(set ,(place 0) ,(place 1) ,newx)))])))))
+
 
 (mac bin= (place value)
 	(let forms (=forms place)
