@@ -1,369 +1,310 @@
 import Prefix
-from Code import *
-from Preprocess import preprocess
-from Tokenize import tokenize
-from Parse import parse
-
-
+import Internal
 
 class CompileError(Exception):
 	pass
 
 
-_cont = Sym(' cont')
-_contList = KlipList([_cont])
-_ret = Sym(' ret')
-_retList = KlipList([_ret])
-_dummy = Sym(' dummy')
+def _print(k, *args):
+	print(*args)
+	raise Internal.TailCall(k, nil)
+
+def _add(k, *args):
+	raise Internal.TailCall(k, sum(args))
 
 
-def _finish(ret, cap, waiting, tail):
-	if tail:
-		ret += [
-			Ld(_cont),
-			cap,
-			Call(1, notes = '_finish')
-		]
-	elif waiting:
-		ret.append(cap)
+genv = Internal.GlobalEnv({
+	'nil' : nil,
+	't' : t,
+	'prn' : _print,
+	'+' : _add,
+	'macex' : lambda x: x,
+})
+
+
+
+class CompCtx(object):
+	def __init__(self, prev = None, **kwargs):
+		if prev:
+			self.__dict__.update(prev.__dict__)
+		self.__dict__.update(kwargs)
+	
+	def __getattr__(self, name):
+		return None
+
+_uniqueCounter = 0
+def nextUnique():
+	global _uniqueCounter
+	ret = _uniqueCounter
+	_uniqueCounter += 1
 	return ret
 
 
-def c_branch(env, rest, offset, waiting, tail):
-	cond = c_xpr(env, rest[0], offset, True, False)
-	consequent = c_xpr(env, rest[1], offset + len(cond) + 1, waiting, tail)
+class Temp(object):
+	def __init__(self):
+		self.maxTemps = 0
+		self._curTempKey = 0
+		self.unsaved = {}
+		self.saved = {}
 	
-	if len(rest) > 2:
-		alternative = c_xpr(env, rest[2], offset + len(cond) + len(consequent) + 2, waiting, tail)
-		consequent.append(Jmp(len(alternative)))
-	else:
-		alternative = _finish([], Lit(nil), waiting, tail)
-		if alternative:
-			consequent.append(Jmp(len(alternative)))
+	def set(self, pyx):
+		key = self._curTempKey
+		self._curTempKey += 1
+		self.unsaved[key] = pyx
+		return key
 	
-	cond.append(Br(len(consequent)))
+	def _findOpenTemp(self):
+		ret = 0
+		while ret in self.saved:
+			ret += 1
+		self.maxTemps = max(self.maxTemps, ret + 1)
+		return ret
 	
-	return cond + consequent + alternative
-
-# def c_assign(env, rest, offset, waiting, tail):
-	# ret = c_xpr(env, rest[1], offset, True, False)
-	# ret.append(St(rest[0]))
-	# return _finish(ret, Ld(rest[0]), waiting, tail)
-
-def c_fn(env, rest, offset, waiting, tail):
-	parmList = rest[0]
-	if isa(parmList, Sym):
-		parmList = KlipList([_cont, KlipList([parmList])])		#Man, this is ugly. And slow.
-	else:
-		parmList = KlipList([_cont] + parmList)					#This is also ugly and slow.
-	return _finish([], Fn(parmList, rest[1:]), waiting, tail)
-
-def c_ccc(env, rest, offset, waiting, tail):
-	ret = c_xpr(env, rest[0], offset, True, False)
+	def push(self, c, indent):
+		for key, pyx in self.unsaved.items():
+			newPyx = 'self.temps[%d]' % self._findOpenTemp()
+			c.line(indent, '%s = %s' % (newPyx, pyx))
+			self.saved[key] = newPyx
+		self.unsaved = {}
 	
-	#This is the continuation that will be invoked by the tail of the user 
-	#function if it returns normally.
-	normalCont = Cont(_retList, 'Dummy value. See below.')
-	ret.append(normalCont)
+	def getPyx(self, key):
+		if key in self.unsaved:
+			return self.unsaved[key]
+		if key in self.saved:
+			return self.saved[key]
+		raise ValueError("Can't find temp key %d." % key)
 	
-	#This is the continuation that will be invoked if the user function 
-	#explicitly calls it. The _dummy is the continuation back to user code 
-	#which will never be called.
-	userCont = Cont(KlipList([_dummy, _ret]), 'Dummy value. See below.', 2)			#Remove the user function and the normal continuation from the saved stack.
-	ret.append(userCont)
-	
-	ret.append(Call(2))
-	
-	#Explicit call of cc lands here...
-	userCont.pos = offset + len(ret)
-	ret += [
-		Arg('Missing dummy argument.'),
-		Pop(),								#and the user continuation is discarded.
-	]
-	
-	#Regular return of user function lands here.
-	normalCont.pos = offset + len(ret)
-	return _finish(ret, Arg('Missing return value.'), waiting, tail)
-
-def c_quote(env, rest, offset, waiting, tail):
-	return _finish([], Lit(rest[0]), waiting, tail)
-
-def c_quasiquote(env, rest, offset, waiting, tail):
-	return c_xpr(env, rest[0], offset, waiting, tail, 1)
-
-def c_unquote(env, rest, offset, waiting, tail):
-	raise CompileError('unquote is undefined at quote level 0.')
-
-def c_unquotesplicing(env, rest, offset, waiting, tail):
-	raise CompileError('unquotesplicing is undefined at quote level 0.')
-
-def c_mac(env, rest, offset, waiting, tail):
-	name = rest[0]
-	parmList = rest[1]
-	body = rest[2:]
-	_allMacros[name] = parmList, compMacro(env, body, parmList)
-	return _finish([], Lit(nil), waiting, tail)
-
-def c_apply(env, rest, offset, waiting, tail):
-	ret = c_xpr(env, rest[0], offset, True, False)
-	temp = Cont(_retList, 'Dummy value. See below.')
-	ret.append(temp)
-	ret += c_xpr(env, rest[1], offset + len(ret), True, False)
-	ret.append(Splice())
-	ret.append(Call(2))
-	temp.pos = offset + len(ret)
-	return _finish(ret, Arg('Missing return value.'), waiting, tail)
-
-def c_halt(env, rest, offset, waiting, tail):
-	return [Halt()]
+	def rem(self, key):
+		if key in self.unsaved:
+			del self.unsaved[key]
+		elif key in self.saved:
+			del self.saved[key]
+		else:
+			raise ValueError("Can't find temp key %d." % key)
 
 
-_specialTable = {
-	'branch' : c_branch,
-	'fn' : c_fn,
-	#'assign' : c_assign,
-	'ccc' : c_ccc,
-	'quote' : c_quote,
-	'quasiquote' : c_quasiquote,
-	'unquote' : c_unquote,
-	'unquotesplicing' : c_unquotesplicing,
-	'mac' : c_mac,
-	'apply' : c_apply,
-	'halt' : c_halt,
-}
+
+class CompInfo(object):
+	def __init__(self, pyx, needsTemp):
+		self.pyx = pyx
+		self.needsTemp = needsTemp
 
 
-_allMacros = {}
 
+#Possible optimization: Don't slice the function unless something actually 
+#exists that will see the continuation. This would require the ability to shift 
+#rapidly between CPS and non-CPS. The Func class would need callCPS and 
+#callNCPS methods. Builtins would need different versions, too.
 
-def macex(xpr, head = True):
-	if isa(xpr, KlipList):
-		changed = False
-		while isa(xpr, KlipList) and isa(xpr[0], Sym) and xpr[0] in _allMacros:
-			parmList, func = _allMacros[xpr[0]]
-			c = Computer(func)
-			c.env.setArgs(xpr[1:])
-			#wrangleArgs(c.env, parmList, args)
-			
-			while True:
-				try:
-					c.step()
-				except StopIteration:
-					break
-			xpr = c.stack[0]
-			changed = True
-		if changed and debugCompile:
-			print('EXPANDED TO %s' % xpr)
-	return xpr
-
-#This is provided for ExtractNames.
-def getAllMacros():
-	return _allMacros
-
-
-def c_hash(env, xpr, offset, waiting, tail, qq = 0):
-	ret = [Ld(Sym('hash'))]
-	temp = Cont(_retList, 'Dummy value. See below.')
-	ret.append(temp)
-	for k, v in xpr.items():
-		ret += c_xpr(env, k, offset + len(ret), True, False, qq)
-		ret += c_xpr(env, v, offset + len(ret), True, False, qq)
-	ret.append(Call(2 * len(xpr) + 1))
-	temp.pos = offset + len(ret)
-	return _finish(ret, Arg('Missing return value.'), waiting, tail)
-
-
-def c_qq(env, xpr, offset, waiting, tail, qq):
-	if isa(xpr, KlipList):
-		if not len(xpr):
-			return [Lit(xpr)]
+class Compiler(object):
+	def __init__(self, parmList, body, name = 'f'):
+		self.lines = []
+		self.name = name
 		
-		head = xpr[0]
+		self.curMethod = 1
 		
-		if head == Sym('unquote'):
-			qq -= 1
-			if qq == 0:
-				return c_xpr(env, xpr[1], offset, waiting, tail, qq)
-		elif head == Sym('unquotesplicing'):
-			qq -= 1
-			if qq == 0:
-				ret = c_xpr(env, xpr[1], offset, waiting, tail, qq)
-				ret.append(Splice())
-				return ret
-		elif head == Sym('quasiquote'):
-			qq += 1
+		self.temp = Temp()
 		
-		ret = [Ld(Sym('list'))]
-		temp = Cont(_retList, 'Dummy value. See below.')
-		ret.append(temp)
-		for sub in xpr:
-			ret += c_xpr(env, sub, offset + len(ret), True, False, qq)
-		ret.append(Call(len(xpr) + 1))
-		temp.pos = offset + len(ret)
-		return _finish(ret, Arg('Missing return value.'), waiting, tail)
-	
-	if isa(xpr, KlipHash):
-		return c_hash(env, xpr, offset, waiting, tail, qq)
+		self.line(0, 'class %s(Func):' % self.name)
 		
-	return [Lit(xpr)]
-
-
-def c_body(env, xpr, offset, waiting, tail):
-	if not xpr:
-		return _finish([], Lit(nil), waiting, tail)
-	ret = []
-	for sub in xpr[:-1]:
-		ret += c_xpr(env, sub, offset + len(ret), False, False)
-	ret += c_xpr(env, xpr[-1], offset + len(ret), waiting, tail)
-	return ret
-
-
-def c_list(env, xpr, offset, waiting, tail):
-	head = xpr[0]
-	rest = xpr[1:]
-	
-	#Special forms:
-	if isa(head, Sym):
-		f = _specialTable.get(head.name, None)
-		if f:
-			return f(env, rest, offset, waiting, tail)
-	
-	#ordinary combination:
-	if tail:
-		ret = c_xpr(env, head, offset, True, False)
-		ret.append(Ld(_cont))
-		for sub in xpr[1:]:
-			ret += c_xpr(env, sub, offset + len(ret), True, False)
-		ret.append(Call(len(xpr)))			#-1 for the fn itself, +1 for the continuation.
-	else:
-		ret = c_xpr(env, xpr[0], offset, True, False)
-		temp = Cont(_retList, 'Dummy value. See below.')
-		ret.append(temp)
-		for sub in rest:
-			ret += c_xpr(env, sub, offset + len(ret), True, False)
-		ret.append(Call(len(xpr)))
-		temp.pos = offset + len(ret)
-		if waiting:
-			ret.append(Arg('Missing return value.'))
-	return ret
-
-
-_xprTable = {
-	KlipList : c_list,
-	KlipHash : c_hash
-}
-
-
-def c_xpr(env, xpr, offset, waiting, tail, qq = 0):
-	if qq:
-		return c_qq(env, xpr, offset, waiting, tail, qq)
-	
-	xpr = macex(xpr)
-	
-	f = _xprTable.get(type(xpr), None)
-	if f:
-		return f(env, xpr, offset, waiting, tail)
-	
-	if isa(xpr, Sym):
-		return _finish([], Ld(xpr), waiting, tail)
-	
-	return _finish([], Lit(xpr), waiting, tail)
-
-
-def c_parms(env, parmList):
-	ret = []
-	if isa(parmList, KlipList):
+		pyParms = ['self', 'k']
 		for parm in parmList:
 			if isa(parm, KlipList):
 				if len(parm) == 1:
-					ret += [RestArg(), StLocal(parm[0])]
+					pyParms.append('%s*' % parm[0])
 				else:
-					temp = DefArg('Dummy value. See below.')
-					ret.append(temp)
-					ret += c_xpr(env, parm[1], len(ret), True, False, 0)
-					temp.pos = len(ret)
-					ret.append(StLocal(parm[0]))
+					pyParms.append('%s = %s' % (parm[0], parm[1]))			#Doesn't work yet. And won't ever work, because Python default parameters are only evaluated once. Need to create special values in the class body that are the defaults, and then check for them and generate default code.
 			else:
-				ret += [Arg('Missing argument. %s' % parmList), StLocal(parm)]
-	else:
-		ret += [RestArg(), StLocal(parmList)]
-	ret.append(NoArgsLeft('Too many arguments. %s' % parmList))
-	return ret
-
-
-
-_compCache = {}
-
-def _doComp(env, body, parmList):
-	if debugCompile:
-		print('COMPILING', body)
-	try:
-		ret = c_parms(env, parmList)
-		ret += c_body(env, body, len(ret), True, True)
-	except Exception as e:
-		print('ERROR WHILE COMPILING:\n', body)
-		raise e
-	if debugCompile:
-		print('COMPILED')
-		dumpCode(ret)
-	return ret
-
-def comp(env, parmList, body):
-	if (parmList, body) in _compCache:
-		code = _compCache[(parmList, body)]
-	else:
-		code = _doComp(env, body, parmList)
-		_compCache[(parmList, body)] = code
-	
-	ret = LitFunc(Func(env, code), None, parmList, 0)
-	return ret
-
-
-def compFile(env, tree, offset = 0, main = True):
-	if debugCompile:
-		print('COMPILING FILE', tree)
-	code = []
-	for xpr in tree:
+				pyParms.append(str(parm))
+		
+		self.line(1, 'def __call__(%s):' % ', '.join(pyParms))
+		self.line(2, 'self.setLocal(" cont", k)')
+		for arg in pyParms[2:]:
+			self.line(2, 'self.setLocal("%s", %s)' % (arg, arg))		#Ugh.
+		
 		try:
-			if isa(xpr, KlipList) and xpr[0] == Sym('include'):
-				fname = xpr[1]
-				fin = open(fname, 'r')
-				sub = parse(tokenize(preprocess(fin.read()), fname), fname)
-				fin.close()
-				code += compFile(env, sub, offset + len(code), False)
-			else:
-				#This seems super inefficient. But I don't see any other way of allowing macros to see earlier function definitions.
-				code.append(Fn(_contList, KlipList([xpr])))
-				code.append(Cont(_retList, len(code) + 2))
-				code.append(Call(1, notes = 'compFile'))
+			ctx = CompCtx(tail = False)
+			for xpr in body[:-1]:
+				self.c_xpr(xpr, ctx)
+			self.c_xpr(body[-1], CompCtx(ctx, tail = True))
 		except Exception as e:
-			print('ERROR WHILE COMPILING TOPLEVEL XPR:\n', xpr)
+			print('PARTIAL COMPILER DUMP:')
+			print(str(self))
 			raise e
-	if main:
-		code.append(Halt())
-		if debugCompile:
-			print('COMPILED FILE')
-			dumpCode(code)
-	return code
+		
+		self.line(1, 'def __init__(self, parent):')
+		self.line(2, 'Func.__init__(self, parent, %d)' % self.temp.maxTemps)
+		
+		print(str(self))
+	
+	def nextMethName(self):
+		temp = self.curMethod
+		self.curMethod += 1
+		return '_%d' % temp
+	
+	def c_fn(self, rest, ctx):
+		parmList = rest[0]
+		body = rest[1:]
+		
+		self.temp.push(self, 2)
+		
+		#This is a gruesome hack.
+		fnName = 'fn%d' % nextUnique()
+		Internal.internals[fnName] = (parmList, body)
+		
+		if ctx.tail:
+			k = 'self.get(" cont")'
+		else:
+			methName = self.nextMethName()
+			k = 'self.makeCont(self.%s)' % methName
+		
+		self.line(2, 'raise TailCall(compFunc, %s, *%s)' % (k, fnName))
+		
+		if ctx.tail:
+			return None
+		self.line(1, 'def %s(self, ret):' % methName)
+		self.line(2, 'ret = ret(self)')
+		return self.finish('ret', ctx, True)
+	
+	def c_branch(self, rest, ctx):
+		cond = rest[0]
+		result = rest[1]
+		alternative = len(rest) > 2 and rest[2]
+		
+		ci = self.c_xpr(cond, CompCtx(ctx, tail = False))
+		self.line(2, 'if (%s != nil):' % ci.pyx)
+		
+		if ctx.tail:
+			cont = 'self.get(" cont")'
+		else:
+			finalMeth = self.nextMethName()
+			cont = 'self.makeCont(self.%s)' % finalMeth
+		
+		resultMeth = self.nextMethName()
+		self.line(3, 'raise TailCall(self.%s, None)' % (resultMeth))
+		self.line(2, 'else:')
+		if alternative:
+			alternativeMeth = self.nextMethName()
+			self.line(3, 'raise TailCall(self.%s, None)' % (alternativeMeth))
+		else:
+			self.line(3, 'raise TailCall(%s, nil)' % cont)
+		
+		self.line(1, 'def %s(self, k):' % resultMeth)
+		ci = self.c_xpr(result, ctx)
+		if ci:
+			self.line(2, 'raise TailCall(%s, %s)' % (cont, ci.pyx))
+		
+		if alternative:
+			self.line(1, 'def %s(self, k):' % alternativeMeth)
+			ci = self.c_xpr(alternative, ctx)
+			if ci:
+				self.line(2, 'raise TailCall(%s, %s)' % (cont, ci.pyx))
+		
+		if ctx.tail:
+			return None
+		
+		self.line(1, 'def %s(self, ret):' % finalMeth)
+		return self.finish('ret', ctx, True)
+	
+	_specialTable = {
+		'fn' : c_fn,
+		'branch' : c_branch,
+	}
+	
+	def c_list(self, xpr, ctx):
+		if len(xpr) == 0:
+			return self.finish('KlipList()', ctx, True)
+		
+		head = xpr[0]
+		if isa(head, Sym) and head.name in Compiler._specialTable:
+			return Compiler._specialTable[head.name](self, xpr[1:], ctx)
+		
+		methName = self.nextMethName()
+		subctx = CompCtx(ctx, tail = False)
+		
+		#Create a list of arguments, carefully keeping track of which ones might be temped during the execution of the subsequent ones:
+		pyArgs = []
+		temps = []
+		for sub in xpr:
+			self.temp.push(self, 2)
+			ci = self.c_xpr(sub, subctx)
+			if ci.needsTemp:
+				key = self.temp.set(ci.pyx)
+				temps.append((key, len(pyArgs)))		#Record the temp key and the position in the arg list so we can go back and fix them up.
+			pyArgs.append(ci.pyx)
+		
+		#And now replace all the ones that were temped:
+		for record in temps:
+			key, ix = record
+			pyArgs[ix] = self.temp.getPyx(key)
+		
+		if ctx.tail:
+			pyArgs.insert(1, 'self.get(" cont")')
+		else:
+			pyArgs.insert(1, 'self.makeCont(self.%s)' % methName)
+		self.doCall(pyArgs, ctx)
+		[self.temp.rem(key) for key, ix in temps]			#Deleting all temps is only correct because parms aren't temped. If parms are temped, we need to know the last time a parm is used in the function.
+		
+		if ctx.tail:
+			return None
+		self.line(1, 'def %s(self, ret):' % methName)
+		return self.finish('ret', ctx, True)
+	
+	def c_xpr(self, xpr, ctx):
+		#self.comment(str(xpr))
+		if isa(xpr, KlipList):
+			return self.c_list(xpr, ctx)
+		return self.finish(self.x_atom(xpr, ctx), ctx, False)
+	
+	def x_atom(self, xpr, ctx):
+		if isa(xpr, Sym):
+			return 'self.get("%s")' % xpr
+		if isa(xpr, int) or isa(xpr, float):
+			return str(xpr)
+		if isa(xpr, KlipStr):
+			return '"%s"' % xpr
+		raise ValueError('Unknown atom type %s. (%s)' % (type(xpr), xpr))
+	
+	def finish(self, pyx, ctx, needTemp):
+		if ctx.tail:
+			self.line(2, 'raise TailCall(self.get(" cont"), %s)' % pyx)
+			return None
+		return CompInfo(pyx, needTemp)
+	
+	def doCall(self, args, ctx):
+		self.line(2, 'raise TailCall(')
+		for arg in args:
+			self.line(3, '%s,' % arg)
+		self.line(2, ')')
+	
+	def line(self, indent, s):
+		self.lines.append(indent * '\t' + s)
+	
+	def comment(self, s):
+		self.lines.append('#' + s)
+	
+	def __str__(self):
+		return '\n'.join(self.lines)
+	
+	def make(self):
+		code = compile(str(self), 'Compiler %s' % self.name, 'exec')
+		loc = {}
+		exec(code, Internal.internals, loc)
+		return loc[self.name]
 
-def compMacro(env, tree, parmList):
-	if debugCompile:
-		print('COMPILING MACRO', id(env), tree)
-	try:
-		code = c_parms(env, parmList)
-		code += c_body(env, tree, len(code), True, False)
-		code.append(Halt())
-	except Exception as e:
-		print('ERROR WHILE COMPILING MACRO:\n', tree)
-		raise e
-	if debugCompile:
-		print('COMPILED MACRO')
-		dumpCode(code)
-	return Func(env, code)
+
+def compFunc(k, parmList, body):
+	c = Compiler(parmList, body)
+	raise Internal.TailCall(k, c.make())
+
+Internal.internals['compFunc'] = compFunc
 
 
 if __name__ == '__main__':
-	import sys
+	import sys, traceback
+	from Preprocess import preprocess
+	from Tokenize import tokenize
+	from Parse import parse
 	
 	fin = open(sys.argv[1], 'r')
 	tree = parse(tokenize(preprocess(fin.read()), sys.argv[1]), sys.argv[1])
@@ -371,7 +312,13 @@ if __name__ == '__main__':
 	
 	print(tree)
 	
-	lf = comp(None, KlipList(), tree)
+	c = Compiler(KlipList(), tree)
+	f = c.make()
+
+	def disp(x):
+		print(len(traceback.extract_stack()), x)
+		raise Internal.Halt()
 	
-	dumpCode(lf.func.code)
+	Internal.wrap(f(genv), disp)
+
 

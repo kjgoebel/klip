@@ -5,6 +5,9 @@ if not hasattr(builtins, '_prefix'):
 	
 	builtins.isa = isinstance
 	
+	import string
+	_allowed = set(string.ascii_letters + string.digits)
+	
 	class Sym(object):
 		def __init__(self, name):
 			self.name = name
@@ -26,6 +29,9 @@ if not hasattr(builtins, '_prefix'):
 			if type(other) != Sym:
 				return True
 			return self.name != other.name
+		
+		def pyx(self):
+			return '_' + ''.join([c if c in _allowed else '_%d_' % ord(c) for c in self.name])
 	builtins.Sym = Sym
 	
 	# class GenSym(Sym):
