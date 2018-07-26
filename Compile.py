@@ -113,6 +113,8 @@ class CompInfo(object):
 #rapidly between CPS and non-CPS. The Func class would need callCPS and 
 #callNCPS methods. Builtins would need different versions, too.
 
+
+
 class Compiler(object):
 	def __init__(self, parmList, body):
 		self.lines = []
@@ -168,8 +170,8 @@ class Compiler(object):
 			print(str(self))
 			raise e
 		
-		self.line(1, 'def __init__(self, parent):')
-		self.line(2, 'Func.__init__(self, parent, %d)' % self.temp.maxTemps)
+		self.line(1, 'def __init__(self):')
+		self.line(2, 'Func.__init__(self, self._parent, %d)' % self.temp.maxTemps)
 		
 		print(str(self))
 	
@@ -194,7 +196,7 @@ class Compiler(object):
 		self.line(2, 'raise TailCall(compFunc, %s, *%s)' % (k, fnName))
 		
 		self.line(1, 'def %s(self, ret):' % methName)
-		self.line(2, 'ret = ret(self)')
+		self.line(2, 'ret._parent = self')					#So, this is a weird hack. We're still doing this crazy run-time lexical scoping because apparently I'm too lazy or stupid (or both) to write a compiler that actually generates real closures.
 		return self.finish('ret', ctx, True)
 	
 	def c_branch(self, rest, ctx):
@@ -304,6 +306,7 @@ class Compiler(object):
 		return self.finish('ret', ctx, True)
 	
 	def c_xpr(self, xpr, ctx):
+		#xpr = genv.get('macex')(xpr)
 		#self.comment(str(xpr))
 		if isa(xpr, KlipList):
 			return self.c_list(xpr, ctx)
@@ -367,11 +370,12 @@ if __name__ == '__main__':
 	
 	c = Compiler(KlipList(), tree)
 	f = c.make()
+	f._parent = genv
 
 	def disp(x):
 		print(len(traceback.extract_stack()), x)
 		raise Internal.Halt()
 	
-	Internal.wrap(f(genv), disp)
+	Internal.wrap(f(), disp)
 
 

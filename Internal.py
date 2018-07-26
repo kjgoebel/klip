@@ -75,6 +75,8 @@ def wrap(f, k, *args):
 			f(k, *args)
 		except TailCall as e:
 			f, k, args = e.f, e.k, e.args
+			if isa(f, type):
+				f = f()
 		except Halt as e:
 			return e.value
 
