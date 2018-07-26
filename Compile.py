@@ -12,12 +12,26 @@ def _print(k, *args):
 def _add(k, *args):
 	raise Internal.TailCall(k, sum(args))
 
+def _sub(k, x, y):
+	raise Internal.TailCall(k, x - y)
+
+def _mul(k, *args):
+	acc = 1
+	for arg in args:
+		acc *= arg
+	raise Internal.TailCall(k, acc)
+
+def _lt(k, x, y):
+	raise Internal.TailCall(k, t if x < y else nil)
 
 genv = Internal.GlobalEnv({
 	'nil' : nil,
 	't' : t,
 	'prn' : _print,
 	'+' : _add,
+	'-' : _sub,
+	'*' : _mul,
+	'<' : _lt,
 	'macex' : lambda x: x,
 })
 
@@ -31,6 +45,9 @@ class CompCtx(object):
 	
 	def __getattr__(self, name):
 		return None
+	
+	def derive(self, **kwargs):
+		return CompCtx(self, **kwargs)
 
 _uniqueCounter = 0
 def nextUnique():
@@ -97,9 +114,9 @@ class CompInfo(object):
 #callNCPS methods. Builtins would need different versions, too.
 
 class Compiler(object):
-	def __init__(self, parmList, body, name = 'f'):
+	def __init__(self, parmList, body):
 		self.lines = []
-		self.name = name
+		self.name = 'func%d' % nextUnique()
 		
 		self.curMethod = 1
 		
@@ -107,26 +124,45 @@ class Compiler(object):
 		
 		self.line(0, 'class %s(Func):' % self.name)
 		
+		self.parms = {}				#Sym : <str that is a legal python identifier>
+		
+		parmCleanup = {}
+		
 		pyParms = ['self', 'k']
-		for parm in parmList:
-			if isa(parm, KlipList):
-				if len(parm) == 1:
-					pyParms.append('%s*' % parm[0])
+		if isa(parmList, Sym):
+			legal = parmList.pyx()
+			self.parms[parmList] = legal
+			pyParms.append('*%s' % legal)
+			parmCleanup[parmList] = 'KlipList(%s)' % legal
+		else:
+			for parm in parmList:
+				if isa(parm, KlipList):
+					if len(parm) == 1:
+						legal = parm[0].pyx()
+						self.parms[parm[0]] = legal
+						pyParms.append('*%s' % legal)
+						parmCleanup[parm[0]] = 'KlipList(%s)' % legal
+					else:
+						legal = parm[0].pyx()
+						self.parms[parm[0]] = legal
+						pyParms.append('%s = %s' % (legal, parm[1]))			#Doesn't work yet. And won't ever work, because Python default parameters are only evaluated once. Need to create special values in the class body that are the defaults, and then check for them and generate default code.
 				else:
-					pyParms.append('%s = %s' % (parm[0], parm[1]))			#Doesn't work yet. And won't ever work, because Python default parameters are only evaluated once. Need to create special values in the class body that are the defaults, and then check for them and generate default code.
-			else:
-				pyParms.append(str(parm))
+					legal = parm.pyx()
+					self.parms[parm] = legal
+					pyParms.append(legal)
 		
 		self.line(1, 'def __call__(%s):' % ', '.join(pyParms))
 		self.line(2, 'self.setLocal(" cont", k)')
-		for arg in pyParms[2:]:
-			self.line(2, 'self.setLocal("%s", %s)' % (arg, arg))		#Ugh.
+		for parm, legal in self.parms.items():
+			if parm in parmCleanup:
+				self.line(2, '%s = %s' % (legal, parmCleanup[parm]))
+			self.line(2, 'self.setLocal("%s", %s)' % (parm, legal))			#Parms could be temped, and then some/most of these wouldn't have to be done. But that would require thought.
 		
 		try:
 			ctx = CompCtx(tail = False)
 			for xpr in body[:-1]:
 				self.c_xpr(xpr, ctx)
-			self.c_xpr(body[-1], CompCtx(ctx, tail = True))
+			self.c_xpr(body[-1], ctx.derive(tail = True))
 		except Exception as e:
 			print('PARTIAL COMPILER DUMP:')
 			print(str(self))
@@ -152,16 +188,11 @@ class Compiler(object):
 		fnName = 'fn%d' % nextUnique()
 		Internal.internals[fnName] = (parmList, body)
 		
-		if ctx.tail:
-			k = 'self.get(" cont")'
-		else:
-			methName = self.nextMethName()
-			k = 'self.makeCont(self.%s)' % methName
+		methName = self.nextMethName()
+		k = 'self.makeCont(self.%s)' % methName
 		
 		self.line(2, 'raise TailCall(compFunc, %s, *%s)' % (k, fnName))
 		
-		if ctx.tail:
-			return None
 		self.line(1, 'def %s(self, ret):' % methName)
 		self.line(2, 'ret = ret(self)')
 		return self.finish('ret', ctx, True)
@@ -171,7 +202,7 @@ class Compiler(object):
 		result = rest[1]
 		alternative = len(rest) > 2 and rest[2]
 		
-		ci = self.c_xpr(cond, CompCtx(ctx, tail = False))
+		ci = self.c_xpr(cond, ctx.derive(tail = False))
 		self.line(2, 'if (%s != nil):' % ci.pyx)
 		
 		if ctx.tail:
@@ -206,9 +237,31 @@ class Compiler(object):
 		self.line(1, 'def %s(self, ret):' % finalMeth)
 		return self.finish('ret', ctx, True)
 	
+	def c_ccc(self, rest, ctx):
+		ci = self.c_xpr(rest[0], ctx.derive(tail = False))
+		#ci cannot be None
+		cont = self.nextMethName()
+		self.line(2, 'raise TailCall(%s, self.makeCont(self.%s), self.makeDummyCont(self.%s))' % (ci.pyx, cont, cont))
+		
+		self.line(1, 'def %s(self, ret):' % cont)
+		return self.finish('ret', ctx, True)
+	
+	def c_assign(self, rest, ctx):
+		sym = rest[0]
+		if not isa(sym, Sym):
+			raise CompileError('First argument to assign must be a sym.')
+		
+		pyx = self.c_xpr(rest[1], ctx.derive(tail = False)).pyx
+		
+		self.line(2, 'self.set(" old", self.getSafe("%s"))' % sym)
+		self.line(2, 'self.set("%s", %s)' % (sym, pyx))
+		return self.finish('self.get(" old")', ctx, True)
+	
 	_specialTable = {
 		'fn' : c_fn,
 		'branch' : c_branch,
+		'ccc' : c_ccc,
+		'assign' : c_assign,
 	}
 	
 	def c_list(self, xpr, ctx):
@@ -220,7 +273,7 @@ class Compiler(object):
 			return Compiler._specialTable[head.name](self, xpr[1:], ctx)
 		
 		methName = self.nextMethName()
-		subctx = CompCtx(ctx, tail = False)
+		subctx = ctx.derive(tail = False)
 		
 		#Create a list of arguments, carefully keeping track of which ones might be temped during the execution of the subsequent ones:
 		pyArgs = []

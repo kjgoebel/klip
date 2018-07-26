@@ -32,10 +32,17 @@ class Func(object):
 		self.temps = [None for i in range(ntemps)]
 	
 	def get(self, name):
+		#This is slow?
 		try:
 			return self.vars[name]
 		except KeyError:
 			return self.parent.get(name)
+	
+	def getSafe(self, name):
+		try:
+			return self.get(name)
+		except KeyError:
+			return nil
 	
 	def set(self, name, value):
 		if name in self.vars:
@@ -49,6 +56,13 @@ class Func(object):
 	def makeCont(self, method):
 		saved = self.temps[:]
 		def cont(*args):
+			self.temps[:] = saved
+			method(*args)
+		return cont
+	
+	def makeDummyCont(self, method):
+		saved = self.temps[:]
+		def cont(dummy, *args):
 			self.temps[:] = saved
 			method(*args)
 		return cont
@@ -74,6 +88,9 @@ internals = {
 		'__build_class__' : __build_class__,
 		'nil' : nil,
 		't' : t,
+		'KlipList' : KlipList,
+		'KlipHash' : KlipHash,
+		'KlipStr' : KlipStr,
 	},
 }
 
