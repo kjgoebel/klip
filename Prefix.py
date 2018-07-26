@@ -15,13 +15,11 @@ if not hasattr(builtins, '_prefix'):
 		def __str__(self):
 			return self.name
 		def __repr__(self):
-			return self.name
+			return 'Sym("%s")' % self.name
 		
 		def __hash__(self):
 			return hash(self.name)
 		def __eq__(self, other):
-			# if type(other) != Sym:			#Don't use isa because GenSyms are also Sym instances.
-				# return False
 			if not isa(other, Sym):
 				return False
 			return self.name == other.name
@@ -33,18 +31,6 @@ if not hasattr(builtins, '_prefix'):
 		def pyx(self):
 			return '_' + ''.join([c if c in _allowed else '_%d_' % ord(c) for c in self.name])
 	builtins.Sym = Sym
-	
-	# class GenSym(Sym):
-		# def __repr__(self):
-			# return '(%s:%d)' % (self.name, id(self))
-			
-		# def __hash__(self):
-			# return hash(id(self))
-		# def __eq__(self, other):
-			# return self is other
-		# def __neq__(self, other):
-			# return not self is other
-	# builtins.GenSym = GenSym
 	
 	nil = Sym('nil')
 	builtins.nil = nil
@@ -100,7 +86,7 @@ if not hasattr(builtins, '_prefix'):
 		def __str__(self):
 			return '(%s)' % ' '.join([str(x) for x in self])
 		def __repr__(self):
-			return '(%s)' % ' '.join([repr(x) for x in self])
+			return 'KlipList([%s])' % ', '.join([repr(x) for x in self])
 		
 		def __hash__(self):
 			if self._hash is None:
@@ -156,7 +142,7 @@ if not hasattr(builtins, '_prefix'):
 		def __str__(self):
 			return '{%s}' % ' '.join(['%s %s' % (k, v) for k, v in self.items()])
 		def __repr__(self):
-			return '{%s}' % ', '.join(['%s: %s' % (repr(k), repr(v)) for k, v in self.items()])
+			return 'KlipHash(%s)' % ', '.join(['%s = %s' % (repr(k), repr(v)) for k, v in self.items()])
 		
 		def __hash__(self):
 			if self._hash is None:
@@ -174,6 +160,8 @@ if not hasattr(builtins, '_prefix'):
 	class KlipStr(str):
 		def __call__(self, env, *args):
 			return KlipStr(self % args)
+		def __repr__(self):
+			return 'KlipStr("%s")' % self
 	builtins.KlipStr = KlipStr
 	
 	class SpliceWrapper(list):

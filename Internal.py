@@ -5,6 +5,9 @@ class Halt(Exception):
 	def __init__(self, value = None):
 		self.value = value
 
+def justHalt(value):
+	raise Halt(value)
+
 
 class TailCall(Exception):
 	def __init__(self, f, k, *args):
@@ -71,12 +74,12 @@ class Func(object):
 def wrap(f, k, *args):
 	while True:
 		#print(f, k, args)
+		if isa(f, type):
+			f = f()
 		try:
 			f(k, *args)
 		except TailCall as e:
 			f, k, args = e.f, e.k, e.args
-			if isa(f, type):
-				f = f()
 		except Halt as e:
 			return e.value
 
@@ -88,8 +91,10 @@ internals = {
 		'Func' : Func,
 		'__name__' : 'Temp',
 		'__build_class__' : __build_class__,
+		'Sym' : Sym,
 		'nil' : nil,
 		't' : t,
+		'klipFalse' : klipFalse,
 		'KlipList' : KlipList,
 		'KlipHash' : KlipHash,
 		'KlipStr' : KlipStr,

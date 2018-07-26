@@ -1,39 +1,9 @@
 import Prefix
 import Internal
+from Defaults import genv
 
 class CompileError(Exception):
 	pass
-
-
-def _print(k, *args):
-	print(*args)
-	raise Internal.TailCall(k, nil)
-
-def _add(k, *args):
-	raise Internal.TailCall(k, sum(args))
-
-def _sub(k, x, y):
-	raise Internal.TailCall(k, x - y)
-
-def _mul(k, *args):
-	acc = 1
-	for arg in args:
-		acc *= arg
-	raise Internal.TailCall(k, acc)
-
-def _lt(k, x, y):
-	raise Internal.TailCall(k, t if x < y else nil)
-
-genv = Internal.GlobalEnv({
-	'nil' : nil,
-	't' : t,
-	'prn' : _print,
-	'+' : _add,
-	'-' : _sub,
-	'*' : _mul,
-	'<' : _lt,
-	'macex' : lambda x: x,
-})
 
 
 
@@ -173,7 +143,7 @@ class Compiler(object):
 		self.line(1, 'def __init__(self):')
 		self.line(2, 'Func.__init__(self, self._parent, %d)' % self.temp.maxTemps)
 		
-		print(str(self))
+		#print(str(self))
 	
 	def nextMethName(self):
 		temp = self.curMethod
@@ -205,7 +175,7 @@ class Compiler(object):
 		alternative = len(rest) > 2 and rest[2]
 		
 		ci = self.c_xpr(cond, ctx.derive(tail = False))
-		self.line(2, 'if (%s != nil):' % ci.pyx)
+		self.line(2, 'if klipFalse(%s):' % ci.pyx)
 		
 		if ctx.tail:
 			cont = 'self.get(" cont")'
@@ -213,14 +183,14 @@ class Compiler(object):
 			finalMeth = self.nextMethName()
 			cont = 'self.makeCont(self.%s)' % finalMeth
 		
-		resultMeth = self.nextMethName()
-		self.line(3, 'raise TailCall(self.%s, None)' % (resultMeth))
-		self.line(2, 'else:')
 		if alternative:
 			alternativeMeth = self.nextMethName()
 			self.line(3, 'raise TailCall(self.%s, None)' % (alternativeMeth))
 		else:
 			self.line(3, 'raise TailCall(%s, nil)' % cont)
+		self.line(2, 'else:')
+		resultMeth = self.nextMethName()
+		self.line(3, 'raise TailCall(self.%s, None)' % (resultMeth))
 		
 		self.line(1, 'def %s(self, k):' % resultMeth)
 		ci = self.c_xpr(result, ctx)
@@ -259,11 +229,22 @@ class Compiler(object):
 		self.line(2, 'self.set("%s", %s)' % (sym, pyx))
 		return self.finish('self.get(" old")', ctx, True)
 	
+	def c_halt(self, rest, ctx):
+		pyx = self.c_xpr(rest[0], ctx.derive(tail = False)).pyx
+		self.line(2, 'raise Halt(%s)' % pyx)
+		return None
+	
+	def c_quote(self, rest, ctx):
+		return self.finish(repr(rest[0]), ctx, True)
+	
 	_specialTable = {
 		'fn' : c_fn,
 		'branch' : c_branch,
 		'ccc' : c_ccc,
 		'assign' : c_assign,
+		'halt' : c_halt,
+		
+		'quote' : c_quote,
 	}
 	
 	def c_list(self, xpr, ctx):
@@ -305,21 +286,22 @@ class Compiler(object):
 		self.line(1, 'def %s(self, ret):' % methName)
 		return self.finish('ret', ctx, True)
 	
-	def c_xpr(self, xpr, ctx):
-		#xpr = genv.get('macex')(xpr)
-		#self.comment(str(xpr))
-		if isa(xpr, KlipList):
-			return self.c_list(xpr, ctx)
-		return self.finish(self.x_atom(xpr, ctx), ctx, False)
+	_atomicTypes = set([int, float, KlipStr])
 	
 	def x_atom(self, xpr, ctx):
 		if isa(xpr, Sym):
 			return 'self.get("%s")' % xpr
-		if isa(xpr, int) or isa(xpr, float):
-			return str(xpr)
-		if isa(xpr, KlipStr):
-			return '"%s"' % xpr
+		if type(xpr) in Compiler._atomicTypes:
+			return repr(xpr)
 		raise ValueError('Unknown atom type %s. (%s)' % (type(xpr), xpr))
+	
+	def c_xpr(self, xpr, ctx):
+		xpr = Internal.wrap(genv.get('macex')(), Internal.justHalt, xpr)
+		
+		#self.comment(str(xpr))
+		if isa(xpr, KlipList):
+			return self.c_list(xpr, ctx)
+		return self.finish(self.x_atom(xpr, ctx), ctx, False)
 	
 	def finish(self, pyx, ctx, needTemp):
 		if ctx.tail:
@@ -366,16 +348,17 @@ if __name__ == '__main__':
 	tree = parse(tokenize(preprocess(fin.read()), sys.argv[1]), sys.argv[1])
 	fin.close()
 	
-	print(tree)
+	#print(tree)
 	
-	c = Compiler(KlipList(), tree)
-	f = c.make()
-	f._parent = genv
+	for xpr in tree:
+		c = Compiler(KlipList(), KlipList([xpr]))
+		f = c.make()
+		f._parent = genv
 
-	def disp(x):
-		print(len(traceback.extract_stack()), x)
-		raise Internal.Halt()
-	
-	Internal.wrap(f(), disp)
+		# def disp(x):
+			# print(len(traceback.extract_stack()), x)
+			# raise Internal.Halt()
+		
+		Internal.wrap(f(), Internal.justHalt)
 
 
