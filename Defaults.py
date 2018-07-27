@@ -1,4 +1,5 @@
-from Internal import TailCall, Halt, Func, GlobalEnv
+import Prefix
+from Internal import Halt, Func, GlobalEnv		#Maybe this stuff should all be in Prefix.
 import operator
 
 
@@ -10,6 +11,13 @@ class DefaultError(Exception):
 def _prn(k, *args):
 	print(*args)
 	raise TailCall(k, nil)
+
+def _prnr(k, *args):
+	print(*map(repr, args))
+	raise TailCall(k, nil)
+
+def _apply(k, f, args):
+	raise TailCall(f, k, *args)
 
 def _list(k, *args):
 	raise TailCall(k, KlipList(args))
@@ -32,11 +40,20 @@ def _typeq(k, arg):
 		raise DefaultError('Unknown object type %s (%s).' % (arg, type(arg)))
 
 
-class MacEx(Func):
-	def __init__(self):
-		Func.__init__(self, genv, 0)
-	def __call__(self, k, xpr):
-		raise Halt(xpr)
+def _len(k, con):
+	raise TailCall(k, len(con))
+
+def _set(k, con, ix, value):
+	raise TailCall(k, con.set(ix, value))
+
+def _insert(k, con, ix, value):
+	raise TailCall(k, con.insert(ix, value))
+
+def _pop(k, con, ix = -1):
+	raise TailCall(k, con.pop(ix))
+
+def _append(k, con, value):
+	raise TailCall(k, con.append(value))
 
 
 
@@ -45,11 +62,18 @@ genv = GlobalEnv({
 	't' : t,
 	
 	'prn' : _prn,
+	'prnr' : _prnr,
+	
+	'apply' : _apply,
 	
 	'list' : _list,
 	'type?' : _typeq,
 	
-	'macex' : MacEx,
+	'len' : _len,
+	'set' : _set,
+	'insert' : _insert,
+	'pop' : _pop,
+	'append' : _append,
 })
 
 

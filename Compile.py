@@ -33,6 +33,7 @@ class Temp(object):
 		self._curTempKey = 0
 		self.unsaved = {}
 		self.saved = {}
+		self.usedTemps = set()
 	
 	def set(self, pyx):
 		key = self._curTempKey
@@ -42,29 +43,31 @@ class Temp(object):
 	
 	def _findOpenTemp(self):
 		ret = 0
-		while ret in self.saved:
+		while ret in self.usedTemps:
 			ret += 1
 		self.maxTemps = max(self.maxTemps, ret + 1)
 		return ret
 	
 	def push(self, c, indent):
 		for key, pyx in self.unsaved.items():
-			newPyx = 'self.temps[%d]' % self._findOpenTemp()
-			c.line(indent, '%s = %s' % (newPyx, pyx))
-			self.saved[key] = newPyx
+			tempIndex = self._findOpenTemp()
+			self.usedTemps.add(tempIndex)
+			c.line(indent, '%s = %s' % ('self.temps[%d]' % tempIndex, pyx))
+			self.saved[key] = tempIndex
 		self.unsaved = {}
 	
 	def getPyx(self, key):
 		if key in self.unsaved:
 			return self.unsaved[key]
 		if key in self.saved:
-			return self.saved[key]
+			return 'self.temps[%d]' % self.saved[key]
 		raise ValueError("Can't find temp key %d." % key)
 	
 	def rem(self, key):
 		if key in self.unsaved:
 			del self.unsaved[key]
 		elif key in self.saved:
+			self.usedTemps.remove(self.saved[key])
 			del self.saved[key]
 		else:
 			raise ValueError("Can't find temp key %d." % key)
@@ -143,7 +146,8 @@ class Compiler(object):
 		self.line(1, 'def __init__(self):')
 		self.line(2, 'Func.__init__(self, self._parent, %d)' % self.temp.maxTemps)
 		
-		#print(str(self))
+		if dcompile:
+			print(str(self))
 	
 	def nextMethName(self):
 		temp = self.curMethod
@@ -237,6 +241,15 @@ class Compiler(object):
 	def c_quote(self, rest, ctx):
 		return self.finish(repr(rest[0]), ctx, True)
 	
+	def c_quasiquote(self, rest, ctx):
+		return self.c_xpr(rest[0], ctx.derive(qq = 1))
+	
+	def c_unquote(self, rest, ctx):
+		raise CompileError('unquote is undefined outside of a quasiquote.')
+	
+	def c_unquotesplicing(self, rest, ctx):
+		raise CompileError('unquotesplicing is undefined outside of a quasiquote.')
+	
 	_specialTable = {
 		'fn' : c_fn,
 		'branch' : c_branch,
@@ -245,6 +258,9 @@ class Compiler(object):
 		'halt' : c_halt,
 		
 		'quote' : c_quote,
+		'quasiquote' : c_quasiquote,
+		'unquote' : c_unquote,
+		'unquotesplicing' : c_unquotesplicing,
 	}
 	
 	def c_list(self, xpr, ctx):
@@ -270,8 +286,7 @@ class Compiler(object):
 			pyArgs.append(ci.pyx)
 		
 		#And now replace all the ones that were temped:
-		for record in temps:
-			key, ix = record
+		for key, ix in temps:
 			pyArgs[ix] = self.temp.getPyx(key)
 		
 		if ctx.tail:
@@ -286,6 +301,98 @@ class Compiler(object):
 		self.line(1, 'def %s(self, ret):' % methName)
 		return self.finish('ret', ctx, True)
 	
+	def c_hash(self, xpr, ctx):
+		subctx = ctx.derive(tail = False)
+		pyKeys = []
+		pyValues = []
+		keyTemps = []
+		valueTemps = []
+		for subK, subV in xpr.items():
+			self.temp.push(self, 2)
+			ci = self.c_xpr(subK, subctx)
+			if ci.needsTemp:
+				tk = self.temp.set(ci.pyx)
+				keyTemps.append((tk, len(pyKeys)))
+			pyKeys.append(ci.pyx)
+			
+			self.temp.push(self, 2)
+			ci = self.c_xpr(subV, subctx)
+			if ci.needsTemp:
+				tk = self.temp.set(ci.pyx)
+				valueTemps.append((tk, len(pyValues)))
+			pyValues.append(ci.pyx)
+		
+		for tk, ix in keyTemps:
+			pyKeys[ix] = self.temp.getPyx(tk)
+		for tk, ix in valueTemps:
+			pyValues[ix] = self.temp.getPyx(tk)
+		
+		s = 'KlipHash({%s})' % ', '.join([
+			'%s : %s' % (pyKeys[i], pyValues[i])
+			for i in range(len(xpr))
+		])
+		[self.temp.rem(tk) for tk in keyTemps]
+		[self.temp.rem(tk) for tk in valueTemps]
+		return self.finish(s, ctx, True)
+	
+	def c_qq(self, xpr, ctx):
+		if isa(xpr, KlipList):
+			if not len(xpr):
+				return self.finish('KlipList()', ctx, True)
+			
+			head = xpr[0]
+			
+			qq = ctx.qq
+			
+			if head == Sym('unquote'):
+				qq -= 1
+				if qq == 0:
+					return self.c_xpr(xpr[1], ctx.derive(qq = qq, tail = False))
+			elif head == Sym('unquotesplicing'):
+				qq -= 1
+				if qq == 0:
+					inner = self.c_xpr(xpr[1], ctx.derive(qq = qq, tail = False))
+					return self.finish('SpliceWrapper(%s)' % inner.pyx, ctx, True)
+			elif head == Sym('quasiquote'):
+				qq += 1
+			
+			subctx = ctx.derive(qq = qq, tail = False)
+			methName = self.nextMethName()
+			
+			#Pretty much copied from c_list. Is there a way to generalize this, and the one in c_hash?
+			pyArgs = ['self.get("list")']
+			temps = []
+			for sub in xpr:
+				self.comment(str(self.temp.unsaved) + str(self.temp.saved))
+				self.temp.push(self, 2)
+				ci = self.c_xpr(sub, subctx)
+				if ci.needsTemp:
+					key = self.temp.set(ci.pyx)
+					temps.append((key, len(pyArgs)))
+				pyArgs.append(ci.pyx)
+			
+			for key, ix in temps:
+				pyArgs[ix] = self.temp.getPyx(key)
+			
+			# if ctx.tail:
+				# pyArgs.insert(1, 'self.get(" cont")')
+			# else:
+				# pyArgs.insert(1, 'self.makeCont(self.%s)' % methName)
+			
+			pyArgs.insert(1, 'self.makeCont(self.%s)' % methName)
+			self.doCall(pyArgs, ctx)
+			[self.temp.rem(key) for key, ix in temps]
+			
+			# if ctx.tail:
+				# return None
+			self.line(1, 'def %s(self, ret):' % methName)
+			return self.finish('KlipList(flatten(ret))', ctx, True)
+		
+		if isa(xpr, KlipHash):
+			return self.c_hash(xpr, ctx)
+		
+		return self.finish(repr(xpr), ctx, True)
+	
 	_atomicTypes = set([int, float, KlipStr])
 	
 	def x_atom(self, xpr, ctx):
@@ -296,11 +403,23 @@ class Compiler(object):
 		raise ValueError('Unknown atom type %s. (%s)' % (type(xpr), xpr))
 	
 	def c_xpr(self, xpr, ctx):
-		xpr = Internal.wrap(genv.get('macex')(), Internal.justHalt, xpr)
+		try:
+			macex = genv.get('macex')
+		except KeyError:
+			pass
+		else:
+			#print('expanding', xpr)
+			xpr = Internal.wrap(macex, Internal.justHalt, xpr)
+			#print('expanded to', xpr)
 		
-		#self.comment(str(xpr))
+		if ctx.qq:
+			return self.c_qq(xpr, ctx)
+		
+		self.comment(str(xpr))
 		if isa(xpr, KlipList):
 			return self.c_list(xpr, ctx)
+		if isa(xpr, KlipHash):
+			return self.c_hash(xpr, ctx)
 		return self.finish(self.x_atom(xpr, ctx), ctx, False)
 	
 	def finish(self, pyx, ctx, needTemp):
@@ -333,31 +452,34 @@ class Compiler(object):
 
 def compFunc(k, parmList, body):
 	c = Compiler(parmList, body)
-	raise Internal.TailCall(k, c.make())
+	raise TailCall(k, c.make())
 
 Internal.internals['compFunc'] = compFunc
 
 
 if __name__ == '__main__':
-	import sys, traceback
+	import sys, traceback, builtins
 	from Preprocess import preprocess
 	from Tokenize import tokenize
 	from Parse import parse
+	
+	if 'dcompile' in sys.argv[1:]:
+		builtins.dcompile = True
 	
 	fin = open(sys.argv[1], 'r')
 	tree = parse(tokenize(preprocess(fin.read()), sys.argv[1]), sys.argv[1])
 	fin.close()
 	
 	#print(tree)
+
+	# def disp(x):
+		# print(len(traceback.extract_stack()), x)
+		# raise Internal.Halt()
 	
 	for xpr in tree:
-		c = Compiler(KlipList(), KlipList([xpr]))
+		c = Compiler(KlipList(), KlipList([xpr]))			#Possibly the call to macex should go here, and macex should take care of recursion.
 		f = c.make()
 		f._parent = genv
-
-		# def disp(x):
-			# print(len(traceback.extract_stack()), x)
-			# raise Internal.Halt()
 		
 		Internal.wrap(f(), Internal.justHalt)
 

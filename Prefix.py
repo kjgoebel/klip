@@ -5,6 +5,16 @@ if not hasattr(builtins, '_prefix'):
 	
 	builtins.isa = isinstance
 	
+	
+	class TailCall(Exception):
+		def __init__(self, f, k, *args):
+			self.f = f
+			self.k = k
+			self.args = args
+	builtins.TailCall = TailCall
+	
+	
+	
 	import string
 	_allowed = set(string.ascii_letters + string.digits)
 	
@@ -38,17 +48,17 @@ if not hasattr(builtins, '_prefix'):
 	builtins.t = t
 	
 	class KlipCollection(object):
-		def __call__(self, env, *args):
+		def __call__(self, k, *args):
 			try:
 				item = self[args[0]]
 			except IndexError:
-				return nil
+				raise TailCall(k, nil)
 			except KeyError:
-				return nil
+				raise TailCall(k, nil)
 			
 			if len(args) > 1:
-				return item(env, *args[1:])
-			return item
+				raise TailCall(k, item(env, *args[1:]))
+			raise TailCall(k, item)
 	
 	def _makeIx(ix):
 		if isa(ix, KlipList):
@@ -142,7 +152,7 @@ if not hasattr(builtins, '_prefix'):
 		def __str__(self):
 			return '{%s}' % ' '.join(['%s %s' % (k, v) for k, v in self.items()])
 		def __repr__(self):
-			return 'KlipHash(%s)' % ', '.join(['%s = %s' % (repr(k), repr(v)) for k, v in self.items()])
+			return 'KlipHash({%s})' % ', '.join(['%s : %s' % (repr(k), repr(v)) for k, v in self.items()])
 		
 		def __hash__(self):
 			if self._hash is None:
@@ -158,8 +168,8 @@ if not hasattr(builtins, '_prefix'):
 	builtins.KlipHash = KlipHash
 	
 	class KlipStr(str):
-		def __call__(self, env, *args):
-			return KlipStr(self % args)
+		def __call__(self, k, *args):
+			raise TailCall(k, KlipStr(self % args))
 		def __repr__(self):
 			return 'KlipStr("%s")' % self
 	builtins.KlipStr = KlipStr
@@ -184,8 +194,5 @@ if not hasattr(builtins, '_prefix'):
 			return x == nil
 	builtins.klipFalse = klipFalse
 	
-	
-	builtins.debugTrace = False
-	builtins.debugCompile = False
-	builtins.debugEnv = False
+	builtins.dcompile = False
 

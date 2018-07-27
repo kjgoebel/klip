@@ -9,11 +9,7 @@ def justHalt(value):
 	raise Halt(value)
 
 
-class TailCall(Exception):
-	def __init__(self, f, k, *args):
-		self.f = f
-		self.k = k
-		self.args = args
+
 
 
 class GlobalEnv(object):
@@ -85,20 +81,25 @@ def wrap(f, k, *args):
 
 
 internals = {
-	'__builtins__' : {
-		'Halt' : Halt,
-		'TailCall' : TailCall,
-		'Func' : Func,
-		'__name__' : 'Temp',
-		'__build_class__' : __build_class__,
-		'Sym' : Sym,
-		'nil' : nil,
-		't' : t,
-		'klipFalse' : klipFalse,
-		'KlipList' : KlipList,
-		'KlipHash' : KlipHash,
-		'KlipStr' : KlipStr,
-	},
+	# '__builtins__' : {
+		# 'Halt' : Halt,
+		# 'TailCall' : TailCall,
+		# 'Func' : Func,
+		# '__name__' : 'Temp',
+		# '__build_class__' : __build_class__,
+		# 'Sym' : Sym,
+		# 'nil' : nil,
+		# 't' : t,
+		# 'klipFalse' : klipFalse,
+		# 'KlipList' : KlipList,
+		# 'KlipHash' : KlipHash,
+		# 'KlipStr' : KlipStr,
+		# 'SpliceWrapper' : SpliceWrapper,
+		# 'flatten' : flatten,
+	# },
+	'Func' : Func,
+	'Halt' : Halt,
+	'TailCall' : TailCall,
 }
 
 
