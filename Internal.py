@@ -64,7 +64,7 @@ def _hash(env, *args):
 
 def _items(env, con):
 	if isa(con, KlipList):
-		return con[:]
+		return KlipList(con[:])
 	elif isa(con, KlipHash):
 		return KlipList([KlipList([k, v]) for k, v in con.items()])
 	elif isa(con, KlipStr):
