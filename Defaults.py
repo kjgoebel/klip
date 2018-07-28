@@ -1,12 +1,15 @@
 import Prefix
 from Internal import Halt, Func, GlobalEnv		#Maybe this stuff should all be in Prefix.
-import operator
+import operator, time, random
 
 
 class DefaultError(Exception):
 	pass
 
 
+
+def _no(k, arg):
+	raise TailCall(k, t if klipFalse(arg) else nil)
 
 def _prn(k, *args):
 	print(*args)
@@ -40,6 +43,16 @@ def _typeq(k, arg):
 		raise DefaultError('Unknown object type %s (%s).' % (arg, type(arg)))
 
 
+def _items(k, con):
+	if isa(con, KlipList):
+		raise TailCall(k, KlipList(con[:]))
+	elif isa(con, KlipHash):
+		raise TailCall(k, KlipList([KlipList([k, v]) for k, v in con.items()]))
+	elif isa(con, KlipStr):
+		raise TailCall(k, KlipList([x for x in con]))
+	else:
+		raise ValueError("Can't get items from %s." % con)
+
 def _len(k, con):
 	raise TailCall(k, len(con))
 
@@ -56,10 +69,33 @@ def _append(k, con, value):
 	raise TailCall(k, con.append(value))
 
 
+_uniqCounter = 0
+def _uniq(k, name = None):
+	global _uniqCounter
+	_uniqCounter += 1
+	raise TailCall(k, Sym('gs %d%s' % (_uniqCounter, ('(%s)' % name) if name else '')))
+
+
+def _bnot(k, arg):
+	if not isa(arg, int):
+		raise DefaultError("Can't use bnot on an object of type %s." % type(arg))
+	raise TailCall(k, ~arg)
+
+def _time(k):
+	raise TailCall(k, time.time())
+
+def _rand(k, *args):
+	raise TailCall(k, random.randrange(*args))
+
+def _randf(k):
+	raise TaiLCall(k, random.random())
+
 
 genv = GlobalEnv({
 	'nil' : nil,
 	't' : t,
+	
+	'no' : _no,
 	
 	'prn' : _prn,
 	'prnr' : _prnr,
@@ -69,11 +105,21 @@ genv = GlobalEnv({
 	'list' : _list,
 	'type?' : _typeq,
 	
+	'items' : _items,
 	'len' : _len,
 	'set' : _set,
 	'insert' : _insert,
 	'pop' : _pop,
 	'append' : _append,
+	
+	'uniq' : _uniq,
+	
+	'bnot' : _bnot,
+	
+	'time' : _time,
+	
+	'rand' : _rand,
+	'randf' : _randf,
 })
 
 

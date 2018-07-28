@@ -57,7 +57,7 @@ if not hasattr(builtins, '_prefix'):
 				raise TailCall(k, nil)
 			
 			if len(args) > 1:
-				raise TailCall(k, item(env, *args[1:]))
+				raise TailCall(item, k, *args[1:])
 			raise TailCall(k, item)
 	
 	def _makeIx(ix):
@@ -195,4 +195,5 @@ if not hasattr(builtins, '_prefix'):
 	builtins.klipFalse = klipFalse
 	
 	builtins.dcompile = False
+	builtins.dxprs = False
 

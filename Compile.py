@@ -39,6 +39,7 @@ class Temp(object):
 		key = self._curTempKey
 		self._curTempKey += 1
 		self.unsaved[key] = pyx
+		#print('************TEMP CREATED', key)
 		return key
 	
 	def _findOpenTemp(self):
@@ -64,6 +65,7 @@ class Temp(object):
 		raise ValueError("Can't find temp key %d." % key)
 	
 	def rem(self, key):
+		#print('************TEMP REMOVING', key)
 		if key in self.unsaved:
 			del self.unsaved[key]
 		elif key in self.saved:
@@ -102,6 +104,7 @@ class Compiler(object):
 		self.parms = {}				#Sym : <str that is a legal python identifier>
 		
 		parmCleanup = {}
+		defaultDummies = []
 		
 		pyParms = ['self', 'k']
 		if isa(parmList, Sym):
@@ -120,11 +123,18 @@ class Compiler(object):
 					else:
 						legal = parm[0].pyx()
 						self.parms[parm[0]] = legal
-						pyParms.append('%s = %s' % (legal, parm[1]))			#Doesn't work yet. And won't ever work, because Python default parameters are only evaluated once. Need to create special values in the class body that are the defaults, and then check for them and generate default code.
+						dummyName = '_defParm%d' % nextUnique()
+						pyParms.append('%s = %s' % (legal, dummyName))
+						defaultDummies.append((legal, dummyName, parm[0], parm[1]))
 				else:
 					legal = parm.pyx()
 					self.parms[parm] = legal
 					pyParms.append(legal)
+		
+		ctx = CompCtx(tail = False)
+		
+		for legal, dummyName, parm, xpr in defaultDummies:
+			self.line(1, '%s = object()' % dummyName)
 		
 		self.line(1, 'def __call__(%s):' % ', '.join(pyParms))
 		self.line(2, 'self.setLocal(" cont", k)')
@@ -134,7 +144,12 @@ class Compiler(object):
 			self.line(2, 'self.setLocal("%s", %s)' % (parm, legal))			#Parms could be temped, and then some/most of these wouldn't have to be done. But that would require thought.
 		
 		try:
-			ctx = CompCtx(tail = False)
+			for legal, dummyName, parm, xpr in defaultDummies:
+				ci = self.c_xpr(xpr, ctx)			#Argh. The default value is always calculated.
+				#ci can't be None
+				self.line(2, 'if self.get("%s") is self.%s:' % (parm, dummyName))
+				self.line(3, 'self.setLocal("%s", %s)' % (parm, ci.pyx))
+			
 			for xpr in body[:-1]:
 				self.c_xpr(xpr, ctx)
 			self.c_xpr(body[-1], ctx.derive(tail = True))
@@ -222,21 +237,37 @@ class Compiler(object):
 		self.line(1, 'def %s(self, ret):' % cont)
 		return self.finish('ret', ctx, True)
 	
-	def c_assign(self, rest, ctx):
+	# def c_assign(self, rest, ctx):
+		# sym = rest[0]
+		# if not isa(sym, Sym):
+			# raise CompileError('First argument to assign must be a sym.')
+		
+		# pyx = self.c_xpr(rest[1], ctx.derive(tail = False)).pyx
+		
+		# self.line(2, 'self.set(" old", self.getSafe("%s"))' % sym)
+		# self.line(2, 'self.set("%s", %s)' % (sym, pyx))
+		# return self.finish('self.get(" old")', ctx, True)
+	
+	def c_getSafe(self, rest, ctx):
 		sym = rest[0]
 		if not isa(sym, Sym):
-			raise CompileError('First argument to assign must be a sym.')
+			raise CompileError('Argument to get-safe must be a sym.')
+		
+		return self.finish('self.getSafe("%s")' % sym, ctx, False)
+	
+	def c_setVar(self, rest, ctx):
+		sym = rest[0]
+		if not isa(sym, Sym):
+			raise CompileError('First argument to set-var must be a sym.')
 		
 		pyx = self.c_xpr(rest[1], ctx.derive(tail = False)).pyx
-		
-		self.line(2, 'self.set(" old", self.getSafe("%s"))' % sym)
 		self.line(2, 'self.set("%s", %s)' % (sym, pyx))
-		return self.finish('self.get(" old")', ctx, True)
+		return self.finish('nil', ctx, False)
 	
 	def c_halt(self, rest, ctx):
 		pyx = self.c_xpr(rest[0], ctx.derive(tail = False)).pyx
 		self.line(2, 'raise Halt(%s)' % pyx)
-		return None
+		return self.finish('None', ctx, False)
 	
 	def c_quote(self, rest, ctx):
 		return self.finish(repr(rest[0]), ctx, True)
@@ -254,7 +285,9 @@ class Compiler(object):
 		'fn' : c_fn,
 		'branch' : c_branch,
 		'ccc' : c_ccc,
-		'assign' : c_assign,
+		#'assign' : c_assign,
+		'get-safe' : c_getSafe,
+		'set-var' : c_setVar,
 		'halt' : c_halt,
 		
 		'quote' : c_quote,
@@ -280,6 +313,7 @@ class Compiler(object):
 		for sub in xpr:
 			self.temp.push(self, 2)
 			ci = self.c_xpr(sub, subctx)
+			#ci cannot be None.
 			if ci.needsTemp:
 				key = self.temp.set(ci.pyx)
 				temps.append((key, len(pyArgs)))		#Record the temp key and the position in the arg list so we can go back and fix them up.
@@ -331,8 +365,8 @@ class Compiler(object):
 			'%s : %s' % (pyKeys[i], pyValues[i])
 			for i in range(len(xpr))
 		])
-		[self.temp.rem(tk) for tk in keyTemps]
-		[self.temp.rem(tk) for tk in valueTemps]
+		[self.temp.rem(tk) for tk, ix in keyTemps]
+		[self.temp.rem(tk) for tk, ix in valueTemps]
 		return self.finish(s, ctx, True)
 	
 	def c_qq(self, xpr, ctx):
@@ -363,7 +397,7 @@ class Compiler(object):
 			pyArgs = ['self.get("list")']
 			temps = []
 			for sub in xpr:
-				self.comment(str(self.temp.unsaved) + str(self.temp.saved))
+				#self.comment(str(self.temp.unsaved) + str(self.temp.saved))
 				self.temp.push(self, 2)
 				ci = self.c_xpr(sub, subctx)
 				if ci.needsTemp:
@@ -403,19 +437,21 @@ class Compiler(object):
 		raise ValueError('Unknown atom type %s. (%s)' % (type(xpr), xpr))
 	
 	def c_xpr(self, xpr, ctx):
+		if ctx.qq:
+			return self.c_qq(xpr, ctx)
+		
 		try:
 			macex = genv.get('macex')
 		except KeyError:
 			pass
 		else:
-			#print('expanding', xpr)
+			#self.comment('expanding %s' % xpr)
 			xpr = Internal.wrap(macex, Internal.justHalt, xpr)
-			#print('expanded to', xpr)
+			#self.comment('expanded to %s' % xpr)
 		
-		if ctx.qq:
-			return self.c_qq(xpr, ctx)
+		if dxprs:
+			self.comment(str(xpr))
 		
-		self.comment(str(xpr))
 		if isa(xpr, KlipList):
 			return self.c_list(xpr, ctx)
 		if isa(xpr, KlipHash):
@@ -463,8 +499,8 @@ if __name__ == '__main__':
 	from Tokenize import tokenize
 	from Parse import parse
 	
-	if 'dcompile' in sys.argv[1:]:
-		builtins.dcompile = True
+	for parm in sys.argv[1:]:
+		setattr(builtins, parm, True)
 	
 	fin = open(sys.argv[1], 'r')
 	tree = parse(tokenize(preprocess(fin.read()), sys.argv[1]), sys.argv[1])
@@ -476,11 +512,25 @@ if __name__ == '__main__':
 		# print(len(traceback.extract_stack()), x)
 		# raise Internal.Halt()
 	
+	#This is dumb.
+	newTree = []
 	for xpr in tree:
+		if isa(xpr, KlipList):
+			if len(xpr) and xpr[0] == Sym('include'):
+				fin = open(xpr[1], 'r')
+				newTree += parse(tokenize(preprocess(fin.read()), xpr[1]), xpr[1])
+				fin.close()
+			else:
+				newTree.append(xpr)
+	
+	for xpr in newTree:
 		c = Compiler(KlipList(), KlipList([xpr]))			#Possibly the call to macex should go here, and macex should take care of recursion.
 		f = c.make()
 		f._parent = genv
 		
-		Internal.wrap(f(), Internal.justHalt)
+		result = Internal.wrap(f(), Internal.justHalt)
+		if result != nil:									#This is a dumb hack to deal with the fact that we're running each toplevel expression in a separate call to wrap. The halt form actually means something now, if you pass a non-nil argument to it.
+			print(result)
+			break
 
 

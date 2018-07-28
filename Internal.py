@@ -8,7 +8,8 @@ class Halt(Exception):
 def justHalt(value):
 	raise Halt(value)
 
-
+class TailCallError(Exception):
+	pass
 
 
 
@@ -78,6 +79,8 @@ def wrap(f, k, *args):
 			f, k, args = e.f, e.k, e.args
 		except Halt as e:
 			return e.value
+		else:
+			raise TailCallError('There was no tail call. (%s, %s, %s)' % (f, k, args))
 
 
 internals = {

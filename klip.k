@@ -1,9 +1,43 @@
 
-(mac do body
-	`((fn () ;body)))
+(set-var *all-macros* {})
+
+#macex cannot use fn forms (after the first one), because they would be 
+#compiled during execution of macex, which would make macex recursive with no 
+#stopping condition.
+(set-var macex (fn (xpr (mac-func nil))
+	(branch (!= (type? xpr) ~list)
+		(halt xpr))
+	(branch (== (len xpr) 0)
+		(halt xpr))
+	(set-var mac-func (*all-macros* (xpr 0)))
+	(branch mac-func
+		(macex (apply mac-func (xpr [1 t])))
+		(halt xpr))))
+
+# #This function cannot use fn forms, because they would be compiled as macex was 
+# #executing, making macex recursive with no stopping condition.
+# (set-var macify (fn (xpr (mac-func nil))
+	# (set-var mac-func (*all-macros* (xpr 0)))
+	# (branch mac-func
+		# (macify (apply mac-func (xpr [1 t])))
+		# xpr)))
+
+# (set-var macex (fn (xpr)
+	# (halt
+		# (branch (== (type? xpr) ~list)
+			# (branch (== (len xpr) 0)
+				# xpr
+				# (macify xpr))
+			# xpr))))
+
+(set *all-macros* ~mac (fn (name args (body))
+	`(set *all-macros* ~,name (fn ,args ;body))))
 
 (mac assign (name value)
-	`(set-var ~,name ,value))
+	`(set-var ,name ,value))
+
+(mac do body
+	`((fn () ;body)))
 
 (mac def (name args (body))
 	`(assign ,name (fn ,args ;body)))
@@ -133,10 +167,10 @@
 		(== (type? place) ~sym)
 		(luq (oldx newx)
 			[
-				[oldx `(get-safe ~,place)]
+				[oldx `(get-safe ,place)]
 				oldx
 				`(fn (,newx)
-					(set-var ~,place ,newx))])
+					(set-var ,place ,newx))])
 		
 		(== (type? place) ~list)
 		(let form-func (place-table (place 0))
@@ -149,7 +183,9 @@
 						`(fn (,newx)
 							,(if (> (len place) 2)
 								`(set ,(place [t -1]) ,(place -1) ,newx)
-								`(set ,(place 0) ,(place 1) ,newx)))])))))
+								`(set ,(place 0) ,(place 1) ,newx)))])))
+		
+		(halt ("=forms doesn't know what to do with %s" place))))
 
 
 (mac bin= (place value)
@@ -175,8 +211,6 @@
 		`(let (;(forms 0))
 			(,(forms 2) (- ,(forms 1) ,delta))
 			,(forms 1))))
-
-
 
 
 (mac iflet (s v (rest))
@@ -296,7 +330,8 @@
 							(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
 						(while (,op ,i ,_stop)
 							;body
-							(++ ,i ,_step)))))
+							#(++ ,i ,_step)))))
+							(assign ,i (+ ,i ,_step))))))
 			(case (len r)
 				1 (forfunc i 0 (r 0) 1 body)
 				2 (forfunc i (r 0) (r 1) 1 body)
@@ -305,6 +340,7 @@
 
 (mac forlen (i seq (body))
 	`(for ,i ((len ,seq)) ;body))
+
 
 #PLURALIZE
 #A tool for compounding the effects of macros.
@@ -329,6 +365,7 @@
 				`(,~,old ;[;old-args]
 					(,~,new ,(args [,n t]) ;body))
 				`(do ;body)))))
+
 
 (pluralize 2 for fors)
 (pluralize 2 forlen forlens)
