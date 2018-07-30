@@ -25,16 +25,16 @@
 (prn '\tTest 6 (12):')
 (prn
 	((fn ()
-		(assign x 6)
+		(set-var x 6)
 		(+ x x))))
 
 (prn '\tTest 7 CCC (blorts counting down):')
 (
 	(fn ()
-		(assign n 10)
-		(assign cc (ccc (fn (_) _)))
+		(set-var n 10)
+		(set-var cc (ccc (fn (_) _)))
 		(prn 'blort' n)
-		(assign n (- n 1))
+		(set-var n (- n 1))
 		(branch (> n 0)
 			(cc cc))))
 
@@ -53,11 +53,11 @@
 (prn '\tTest 9 (24, 120):')
 (
 	(fn ()
-		(assign fac1
+		(set-var fac1
 			(
 				(fn ()
-					(assign self nil)
-					(assign self
+					(set-var self nil)
+					(set-var self
 						(fn (n (acc 1))
 							(branch (< n 2)
 								acc
@@ -67,7 +67,7 @@
 		(prn (fac1 5))))
 
 (prn '\tTest 10 (24, 120):')
-(assign fac2 (fn (n (acc 1))
+(set-var fac2 (fn (n (acc 1))
 	(branch (< n 2)
 		acc
 		(fac2 (- n 1) (* acc n)))))
@@ -81,12 +81,12 @@
 		(f 1))
 	(fn (n (test11-x 9))
 		(branch (== n 0)
-			(assign test11-x 4))
+			(set-var test11-x 4))
 		(prn test11-x)
 		nil))
 
 (prn '\tTest 12 ARRAYS ((1 2 3), 3, 3, nil, (1 2 3 4), (3 4), 3, (1 2 4)):')
-(assign a [1 (+ 1 1) 3])
+(set-var a [1 (+ 1 1) 3])
 (prn a)
 (prn (len a))
 (prn (a -1))
@@ -97,7 +97,7 @@
 (prn a)
 
 (prn '\tTest 13 HASHES ({one 1 two 2}, 2, 2, nil, 1, {two 2 three 3}:')
-(assign h {'one' 1 'two' (+ 1 1)})
+(set-var h {'one' 1 'two' (+ 1 1)})
 (prn h)
 (prn (len h))
 (prn (h 'two'))

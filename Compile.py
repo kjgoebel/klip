@@ -486,9 +486,15 @@ class Compiler(object):
 		return loc[self.name]
 
 
+_compCache = {}
 def compFunc(k, parmList, body):
-	c = Compiler(parmList, body)
-	raise TailCall(k, c.make())
+	if not (parmList, body) in _compCache:
+		c = Compiler(parmList, body)
+		_compCache[(parmList, body)] = c
+	raise TailCall(k, _compCache[(parmList, body)].make())
+	
+	# c = Compiler(parmList, body)
+	# raise TailCall(k, c.make())
 
 Internal.internals['compFunc'] = compFunc
 
