@@ -14,22 +14,6 @@
 		(macex (apply mac-func (xpr [1 t])))
 		(halt xpr))))
 
-# #This function cannot use fn forms, because they would be compiled as macex was 
-# #executing, making macex recursive with no stopping condition.
-# (set-var macify (fn (xpr (mac-func nil))
-	# (set-var mac-func (*all-macros* (xpr 0)))
-	# (branch mac-func
-		# (macify (apply mac-func (xpr [1 t])))
-		# xpr)))
-
-# (set-var macex (fn (xpr)
-	# (halt
-		# (branch (== (type? xpr) ~list)
-			# (branch (== (len xpr) 0)
-				# xpr
-				# (macify xpr))
-			# xpr))))
-
 (set *all-macros* ~mac (fn (name args (body))
 	`(set *all-macros* ~,name (fn ,args ;body))))
 
@@ -330,8 +314,7 @@
 							(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
 						(while (,op ,i ,_stop)
 							;body
-							#(++ ,i ,_step)))))
-							(assign ,i (+ ,i ,_step))))))
+							(++ ,i ,_step)))))
 			(case (len r)
 				1 (forfunc i 0 (r 0) 1 body)
 				2 (forfunc i (r 0) (r 1) 1 body)
