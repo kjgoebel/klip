@@ -321,6 +321,25 @@
 				3 (forfunc i (r 0) (r 1) (r 2) body)))
 		`(for ,i (,r) ;body)))
 
+# (mac for (i r (body))
+	# (let forfunc
+		# (fn (i start stop step body)
+			# (luq (_start _stop _step op)
+				# `(let
+					# (
+						# (,_start ,start ,_stop ,stop ,_step ,step)
+						# (,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
+					# (while (,op ,i ,_stop)
+						# ;body
+						# (++ ,i ,_step)))))
+		# (if (list? r)
+			# (case (len r)
+				# 1 (forfunc i 0 (r 0) 1 body)
+				# 2 (forfunc i (r 0) (r 1) 1 body)
+				# 3 (forfunc i (r 0) (r 1) (r 2) body)))
+			# (forfunc i 0 r 1 body)))
+
+
 (mac forlen (i seq (body))
 	`(for ,i ((len ,seq)) ;body))
 

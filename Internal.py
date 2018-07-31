@@ -16,6 +16,7 @@ class TailCallError(Exception):
 class GlobalEnv(object):
 	def __init__(self, vars):
 		self.vars = vars
+		self.parent = None
 	
 	def get(self, name):
 		return self.vars[name]
@@ -32,11 +33,12 @@ class Func(object):
 		self.temps = [None for i in range(ntemps)]
 	
 	def get(self, name):
-		#This is slow?
-		try:
-			return self.vars[name]
-		except KeyError:
-			return self.parent.get(name)
+		this = self
+		while this.parent:
+			if name in this.vars:
+				return this.vars[name]
+			this = this.parent
+		return this.vars[name]
 	
 	def getSafe(self, name):
 		try:
@@ -71,7 +73,7 @@ class Func(object):
 def wrap(f, k, *args):
 	while True:
 		#print(f, k, args)
-		if isa(f, type):
+		if type(f) == type:
 			f = f()
 		try:
 			f(k, *args)

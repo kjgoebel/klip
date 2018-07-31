@@ -19,6 +19,7 @@ class CompCtx(object):
 	def derive(self, **kwargs):
 		return CompCtx(self, **kwargs)
 
+
 _uniqueCounter = 0
 def nextUnique():
 	global _uniqueCounter
@@ -123,7 +124,7 @@ class Compiler(object):
 					else:
 						legal = parm[0].pyx()
 						self.parms[parm[0]] = legal
-						dummyName = '_defParm%d' % nextUnique()
+						dummyName = 'defParm%d__' % nextUnique()
 						pyParms.append('%s = %s' % (legal, dummyName))
 						defaultDummies.append((legal, dummyName, parm[0], parm[1]))
 				else:
@@ -137,6 +138,7 @@ class Compiler(object):
 			self.line(1, '%s = object()' % dummyName)
 		
 		self.line(1, 'def __call__(%s):' % ', '.join(pyParms))
+		self.comment('%s, %s' % (parmList, body))
 		self.line(2, 'self.setLocal(" cont", k)')
 		for parm, legal in self.parms.items():
 			if parm in parmCleanup:
@@ -152,6 +154,7 @@ class Compiler(object):
 			
 			for xpr in body[:-1]:
 				self.c_xpr(xpr, ctx)
+			#self.line(2, 'print(self.__dict__)')
 			self.c_xpr(body[-1], ctx.derive(tail = True))
 		except Exception as e:
 			print('PARTIAL COMPILER DUMP:')
@@ -182,10 +185,10 @@ class Compiler(object):
 		methName = self.nextMethName()
 		k = 'self.makeCont(self.%s)' % methName
 		
-		self.line(2, 'raise TailCall(compFunc, %s, *%s)' % (k, fnName))
+		self.comment('%s, %s' % (parmList, body))
+		self.line(2, 'raise TailCall(compFunc, %s, self, *%s)' % (k, fnName))
 		
 		self.line(1, 'def %s(self, ret):' % methName)
-		self.line(2, 'ret._parent = self')					#So, this is a weird hack. We're still doing this crazy run-time lexical scoping because apparently I'm too lazy or stupid (or both) to write a compiler that actually generates real closures.
 		return self.finish('ret', ctx, True)
 	
 	def c_branch(self, rest, ctx):
@@ -445,9 +448,9 @@ class Compiler(object):
 		except KeyError:
 			pass
 		else:
-			#self.comment('expanding %s' % xpr)
+			self.comment('expanding %s' % xpr)
 			xpr = Internal.wrap(macex, Internal.justHalt, xpr)
-			#self.comment('expanded to %s' % xpr)
+			self.comment('expanded to %s' % xpr)
 		
 		if dxprs:
 			self.comment(str(xpr))
@@ -487,11 +490,15 @@ class Compiler(object):
 
 
 _compCache = {}
-def compFunc(k, parmList, body):
+def compFunc(k, parent, parmList, body):
 	if not (parmList, body) in _compCache:
 		c = Compiler(parmList, body)
-		_compCache[(parmList, body)] = c
-	raise TailCall(k, _compCache[(parmList, body)].make())
+		_compCache[(parmList, body)] = c.make()
+	
+	temp = _compCache[(parmList, body)]
+	cls = type('func%d' % nextUnique(), temp.__bases__, dict(temp.__dict__))
+	cls._parent = parent
+	raise TailCall(k, cls)
 	
 	# c = Compiler(parmList, body)
 	# raise TailCall(k, c.make())
