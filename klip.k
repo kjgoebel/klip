@@ -1,24 +1,21 @@
 
-(set-var *all-macros* {})
+(assign *all-macros* {})
 
 #macex cannot use fn forms (after the first one), because they would be 
 #compiled during execution of macex, which would make macex recursive with no 
 #stopping condition.
-(set-var macex (fn (xpr (mac-func nil))
+(assign macex (fn (xpr (mac-func nil))
 	(branch (!= (type? xpr) ~list)
 		(halt xpr))
 	(branch (== (len xpr) 0)
 		(halt xpr))
-	(set-var mac-func (*all-macros* (xpr 0)))
+	(assign mac-func (*all-macros* (xpr 0)))
 	(branch mac-func
 		(macex (apply mac-func (xpr [1 t])))
 		(halt xpr))))
 
 (set *all-macros* ~mac (fn (name args (body))
 	`(set *all-macros* ~,name (fn ,args ;body))))
-
-(mac assign (name value)
-	`(set-var ,name ,value))
 
 (mac do body
 	`((fn () ;body)))
@@ -154,7 +151,7 @@
 				[oldx `(get-safe ,place)]
 				oldx
 				`(fn (,newx)
-					(set-var ,place ,newx))])
+					(assign ,place ,newx))])
 		
 		(== (type? place) ~list)
 		(let form-func (place-table (place 0))
@@ -304,40 +301,22 @@
 #literal slice specifier. Maybe, just maybe, there should be a different macro 
 #called forn that doesn't take slice specifiers.
 (mac for (i r (body))
-	(if (list? r)
-		(let forfunc
-			(fn (i start stop step body)
-				(luq (_start _stop _step op)
-					`(let
-						(
-							(,_start ,start ,_stop ,stop ,_step ,step)
-							(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
-						(while (,op ,i ,_stop)
-							;body
-							(++ ,i ,_step)))))
+	(let forfunc
+		(fn (i start stop step body)
+			(luq (_start _stop _step op)
+				`(let
+					(
+						(,_start ,start ,_stop ,stop ,_step ,step)
+						(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
+					(while (,op ,i ,_stop)
+						;body
+						(++ ,i ,_step)))))
+		(if (list? r)
 			(case (len r)
 				1 (forfunc i 0 (r 0) 1 body)
 				2 (forfunc i (r 0) (r 1) 1 body)
-				3 (forfunc i (r 0) (r 1) (r 2) body)))
-		`(for ,i (,r) ;body)))
-
-# (mac for (i r (body))
-	# (let forfunc
-		# (fn (i start stop step body)
-			# (luq (_start _stop _step op)
-				# `(let
-					# (
-						# (,_start ,start ,_stop ,stop ,_step ,step)
-						# (,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
-					# (while (,op ,i ,_stop)
-						# ;body
-						# (++ ,i ,_step)))))
-		# (if (list? r)
-			# (case (len r)
-				# 1 (forfunc i 0 (r 0) 1 body)
-				# 2 (forfunc i (r 0) (r 1) 1 body)
-				# 3 (forfunc i (r 0) (r 1) (r 2) body)))
-			# (forfunc i 0 r 1 body)))
+				3 (forfunc i (r 0) (r 1) (r 2) body))
+			(forfunc i 0 r 1 body))))
 
 
 (mac forlen (i seq (body))
@@ -375,19 +354,19 @@
 (pluralize 3 eachpair eachpairs)
 
 
-(mac agen (i r (body))
+(mac gen (i r (body))
 	(luq ret
 		`(let ,ret []
 			(for ,i ,r
 				(append ,ret (do ;body)))
 			,ret)))
 
-(pluralize 2 agen agens)
+(pluralize 2 gen gens)
 
-(mac anof (r (body))
-	(luq i `(agen ,i ,r ;body)))
+(mac nof (r (body))
+	(luq i `(gen ,i ,r ;body)))
 
-(pluralize 1 anof anofs)
+(pluralize 1 nof nofs)
 
 
 

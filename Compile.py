@@ -154,7 +154,6 @@ class Compiler(object):
 			
 			for xpr in body[:-1]:
 				self.c_xpr(xpr, ctx)
-			#self.line(2, 'print(self.__dict__)')
 			self.c_xpr(body[-1], ctx.derive(tail = True))
 		except Exception as e:
 			print('PARTIAL COMPILER DUMP:')
@@ -240,17 +239,6 @@ class Compiler(object):
 		self.line(1, 'def %s(self, ret):' % cont)
 		return self.finish('ret', ctx, True)
 	
-	# def c_assign(self, rest, ctx):
-		# sym = rest[0]
-		# if not isa(sym, Sym):
-			# raise CompileError('First argument to assign must be a sym.')
-		
-		# pyx = self.c_xpr(rest[1], ctx.derive(tail = False)).pyx
-		
-		# self.line(2, 'self.set(" old", self.getSafe("%s"))' % sym)
-		# self.line(2, 'self.set("%s", %s)' % (sym, pyx))
-		# return self.finish('self.get(" old")', ctx, True)
-	
 	def c_getSafe(self, rest, ctx):
 		sym = rest[0]
 		if not isa(sym, Sym):
@@ -258,10 +246,10 @@ class Compiler(object):
 		
 		return self.finish('self.getSafe("%s")' % sym, ctx, False)
 	
-	def c_setVar(self, rest, ctx):
+	def c_assign(self, rest, ctx):
 		sym = rest[0]
 		if not isa(sym, Sym):
-			raise CompileError('First argument to set-var must be a sym.')
+			raise CompileError('First argument to assign must be a sym.')
 		
 		pyx = self.c_xpr(rest[1], ctx.derive(tail = False)).pyx
 		self.line(2, 'self.set("%s", %s)' % (sym, pyx))
@@ -288,9 +276,8 @@ class Compiler(object):
 		'fn' : c_fn,
 		'branch' : c_branch,
 		'ccc' : c_ccc,
-		#'assign' : c_assign,
 		'get-safe' : c_getSafe,
-		'set-var' : c_setVar,
+		'assign' : c_assign,
 		'halt' : c_halt,
 		
 		'quote' : c_quote,
@@ -448,9 +435,9 @@ class Compiler(object):
 		except KeyError:
 			pass
 		else:
-			self.comment('expanding %s' % xpr)
+			#self.comment('expanding %s' % xpr)
 			xpr = Internal.wrap(macex, Internal.justHalt, xpr)
-			self.comment('expanded to %s' % xpr)
+			#self.comment('expanded to %s' % xpr)
 		
 		if dxprs:
 			self.comment(str(xpr))
