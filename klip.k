@@ -291,15 +291,12 @@
 	`(case (type? ,var) ;rest))
 
 #Now this is a real loop macro. Accepts both (for <symbol> <number> ...) and 
-#(for <symbol> <slice specifier> ...) forms. That ==,
+#(for <symbol> <slice specifier> ...) forms. That is,
 #(for i 3 ...) -> 0, 1, 2
 #(for i [3] ...) -> 0, 1, 2
 #(for i [1 3] ...) -> 1, 2
 #(for i [1 10 2] ...) -> 1, 3, 5, 7, 9
-#Unfortunately, now that there's only one kind of list, there is no decent way 
-#to put a combination in r. (for i (len s) ...) tries to interpret (len s) as a 
-#literal slice specifier. Maybe, just maybe, there should be a different macro 
-#called forn that doesn't take slice specifiers.
+#(for i (+ 1 2) ...) -> 0, 1, 2
 (mac for (i r (body))
 	(let forfunc
 		(fn (i start stop step body)
@@ -311,16 +308,16 @@
 					(while (,op ,i ,_stop)
 						;body
 						(++ ,i ,_step)))))
-		(if (list? r)
+		(if (and (list? r) (== (r 0) ~list))
 			(case (len r)
-				1 (forfunc i 0 (r 0) 1 body)
-				2 (forfunc i (r 0) (r 1) 1 body)
-				3 (forfunc i (r 0) (r 1) (r 2) body))
+				2 (forfunc i 0 (r 1) 1 body)
+				3 (forfunc i (r 1) (r 2) 1 body)
+				4 (forfunc i (r 1) (r 2) (r 3) body))
 			(forfunc i 0 r 1 body))))
 
 
 (mac forlen (i seq (body))
-	`(for ,i ((len ,seq)) ;body))
+	`(for ,i (len ,seq) ;body))
 
 
 #PLURALIZE
