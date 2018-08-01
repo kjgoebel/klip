@@ -37,6 +37,7 @@ class GlobalEnv(object):
 
 
 
+
 class Func(object):
 	def __init__(self, parent, ntemps):
 		self.vars = parent.vars.copy() if isa(parent, Func) else {}
