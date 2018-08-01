@@ -147,10 +147,21 @@ class Compiler(object):
 		
 		try:
 			for legal, dummyName, parm, xpr in defaultDummies:
-				ci = self.c_xpr(xpr, ctx)			#Argh. The default value is always calculated.
-				#ci can't be None
+				afterMeth = self.nextMethName()
+				defMeth = self.nextMethName()
+				
 				self.line(2, 'if self.get("%s") is self.%s:' % (parm, dummyName))
-				self.line(3, 'self.setLocal("%s", %s)' % (parm, ci.pyx))
+				self.line(3, 'raise TailCall(self.%s, None)' % defMeth)
+				self.line(2, 'else:')
+				self.line(3, 'raise TailCall(self.%s, None)' % afterMeth)
+				
+				self.line(1, 'def %s(self, dummy):' % (defMeth))
+				ci = self.c_xpr(xpr, ctx)
+				#ci can't be None
+				self.line(2, 'self.setLocal("%s", %s)' % (parm, ci.pyx))
+				self.line(2, 'raise TailCall(self.%s, None)' % afterMeth)
+				
+				self.line(1, 'def %s(self, dummy):' % (afterMeth))
 			
 			for xpr in body[:-1]:
 				self.c_xpr(xpr, ctx)
