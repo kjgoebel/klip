@@ -70,10 +70,10 @@ def _append(k, con, value):
 
 
 _uniqCounter = 0
-def _uniq(k, name = None):
+def _uniq(k, sym = None):
 	global _uniqCounter
 	_uniqCounter += 1
-	raise TailCall(k, Sym('gs %d%s' % (_uniqCounter, ('(%s)' % name) if name else '')))
+	raise TailCall(k, Sym(' gs%d%s' % (_uniqCounter, sym.pyx() if sym else '')))
 
 
 def _bnot(k, arg):

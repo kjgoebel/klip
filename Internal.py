@@ -13,32 +13,39 @@ class TailCallError(Exception):
 
 
 
+class Binding(object):
+	def __init__(self, target):
+		self.target = target
+
+
+
 class GlobalEnv(object):
+	genv = None
 	def __init__(self, vars):
-		self.vars = vars
+		self.vars = {k : Binding(v) for k, v in vars.items()}
 		self.parent = None
+		GlobalEnv.genv = self
 	
 	def get(self, name):
-		return self.vars[name]
+		return self.vars[name].target
 	
 	def set(self, name, value):
-		self.vars[name] = value
+		if name in self.vars:
+			self.vars[name].target = value
+		else:
+			self.vars[name] = Binding(value)
 
 
 
 class Func(object):
 	def __init__(self, parent, ntemps):
-		self.parent = parent
-		self.vars = {}
+		self.vars = parent.vars.copy() if isa(parent, Func) else {}
 		self.temps = [None for i in range(ntemps)]
 	
 	def get(self, name):
-		this = self
-		while this.parent:
-			if name in this.vars:
-				return this.vars[name]
-			this = this.parent
-		return this.vars[name]
+		if name in self.vars:
+			return self.vars[name].target
+		return GlobalEnv.genv.get(name)
 	
 	def getSafe(self, name):
 		try:
@@ -48,12 +55,12 @@ class Func(object):
 	
 	def set(self, name, value):
 		if name in self.vars:
-			self.vars[name] = value
+			self.vars[name].target = value
 		else:
-			self.parent.set(name, value)
+			GlobalEnv.genv.set(name, value)
 	
 	def setLocal(self, name, value):
-		self.vars[name] = value
+		self.vars[name] = Binding(value)
 	
 	def makeCont(self, method):
 		saved = self.temps[:]

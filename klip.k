@@ -111,7 +111,7 @@
 			`(_with ,(xprs 0 0) (let ;(xprs 0 [1 t]) ;(xprs [1 t])))
 			`(_with ;xprs))
 		
-		`(_with (,(xprs 0) ,(xprs 1)) ;(xprs [2 t]))))
+		`(_let ,(xprs 0) ,(xprs 1) ;(xprs [2 t]))))
 
 (def map1 (f l)
 	(_let ret []			#So, this is the ugliest thing in consless Lisp. It's not functional code. But something like (+ [(f (l 0))] (map1 (l [1 t]))) would be slow.
@@ -127,10 +127,10 @@
 	(if (list? (xprs 0))
 		`(
 			(fn ,(xprs 0) ;(xprs [1 t]))
-			;(map1 (fn (x) ~(uniq)) (xprs 0)))
+			;(map1 (fn (x) `(uniq ~,x)) (xprs 0)))
 		`(
 			(fn (,(xprs 0)) ;(xprs [1 t]))
-			(uniq))))
+			(uniq ~,(xprs 0)))))
 
 
 (assign place-table {})
@@ -368,7 +368,7 @@
 
 
 (def join args
-	(let ret[]
+	(let ret []
 		(each arg args
 			(each sub arg
 				(append ret sub)))
@@ -403,16 +403,16 @@
 			ret)
 		(apply f args)))
 
-#Industrial strength mapping functions. Each group is a dimension in the final 
+#Industrial strength mapping function. Each group is a dimension in the final 
 #sequence. Each group can be a list, or a list of lists. If it's a list of 
 #lists, each one contributes an argument to f. 
 #So:
-#(map f [1 2 3]) -> ((f 1) (f 2) (f 3))
-#(map f ([1 2 3] [4 5 6])) -> ((f 1 4) (f 2 5) (f 3 6))
-#(map f [1 2 3] [4 5 6]) -> (
-#	((f 1 4) (f 1 5) (f 1 6))
-#	((f 2 4) (f 2 5) (f 2 6))
-#	((f 3 4) (f 3 5) (f 3 6)))
+#(map f [1 2 3]) -> [(f 1) (f 2) (f 3)]
+#(map f ([1 2 3] [4 5 6])) -> [(f 1 4) (f 2 5) (f 3 6)]
+#(map f [1 2 3] [4 5 6]) -> [
+#	[(f 1 4) (f 1 5) (f 1 6)]
+#	[(f 2 4) (f 2 5) (f 2 6)]
+#	[(f 3 4) (f 3 5) (f 3 6)]]
 (def map (f (groups))
 	(_map f [] groups))
 
@@ -422,22 +422,23 @@
 
 (def idfn (x) x)
 
+(def hmap (f h)
+	(let ret {}
+		(each pair (items h)
+			(let temp (f pair)
+				(= (ret (temp 0)) (temp 1))))
+		ret))
+
 (def rcopy (x)
 	(typecase x
-		~list (map rcopy x)
-		~hash (let ret {}
-			(each pair (items x)
-				(= (ret (rcopy (pair 0))) (rcopy (pair 1))))
-			ret)
+		~list (map1 rcopy x)
+		~hash (hmap rcopy x)
 		x))
 		
 (def copy (x)
 	(typecase x
-		~list (map idfn x)
-		~hash (let ret {}
-			(each pair (items x)
-				(= (ret (pair 0)) (pair 1)))
-			ret)
+		~list (map1 idfn x)
+		~hash (hmap idfn x)
 		x))
 
 

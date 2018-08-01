@@ -480,10 +480,10 @@ _compCache = {}
 def compFunc(k, parent, parmList, body):
 	if not (parmList, body) in _compCache:
 		c = Compiler(parmList, body)
-		_compCache[(parmList, body)] = c.make()
+		_compCache[(parmList, body)] = (c.name, c.make())
 	
-	temp = _compCache[(parmList, body)]
-	cls = type('func%d' % nextUnique(), temp.__bases__, dict(temp.__dict__))
+	name, temp = _compCache[(parmList, body)]
+	cls = type(name, temp.__bases__, dict(temp.__dict__))
 	cls._parent = parent
 	raise TailCall(k, cls)
 	
