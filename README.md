@@ -1,7 +1,7 @@
 # Klip
 Klip is a lexically scoped Lisp inspired by Arc.
 
-Klip currently runs on a virtual machine implemented in Python. Why would anyone do this? Well, I thought it would be fun, and all the Lisp dialects I know of annoy me in some way.
+Klip is currently compiled into Python. Why would anyone do this? Well, I thought it would be fun, and all the Lisp dialects I know of annoy me in some way.
 
 It's nowhere near finished. This paragraph, for example, ends before it's really begun.
 
@@ -27,7 +27,7 @@ Klip differs from other Lisps in the usage of some symbols. In particular, the s
 
 ### Special Forms
 #### ```(branch <conditional> <consequent> [<alternative>])```
-The branch form is used exactly six times in Klip. That's how many it takes to write the vastly more powerful ```if``` macro (see below).
+The branch form is used exactly nine times in Klip. That's how many it takes to write the vastly more powerful ```if``` macro (see below).
 
 #### ```(fn <parameter list> <body of zero or more expressions>)```
 Lambda is spelled ```fn``` in Klip.
@@ -42,20 +42,20 @@ The entire parameter list can be a symbol:
 
 ```(fn args ...)``` -> The name `args` will be a list of all the arguments.
 
+#### ```(assign <symbol> <expression>)```
+Assigns the value of the given expression to the given symbol. The value of the `assign` form is `nil`.
+
+#### ```(get-safe <symbol>)```
+Evaluates to the current value of the given symbol, or `nil` if the symbol is undefined.
+
 #### ```(ccc <function of one parameter>)```
 Stands for Call with Current Continuation. It calls the function, passing it the current continuation. This is a first-order continuation that can be called more than once and from outside the `ccc` form. The value of the `ccc` form is either the return value of the given function or the value passed to the continuation when it's called.
-
-#### ```(mac <name> <argument list> <body of zero or more expressions>)```
-Creates a macro. Klip uses good, old-fashioned unhygienic macros. This form defines a function with the given arugment list and body. From now on, when the compiler finds an expression whose head is equal to `name`, it will call this function on the rest of the expression, and compile the return value of that function instead of the original expression. The value of the `mac` form is `nil`.
-
-#### ```(apply <function> <argument list>)```
-The given function is called with the given list as its arguments. The value of the `apply` form is the return value of that function.
 
 #### ```(include <file name>)```
 Behaves as if all the expressions in the specified file were inserted in this file here. Only valid at the toplevel.
 
-#### ```(halt)```
-Stops the virtual machine.
+#### ```(halt <any object>)```
+Stops the program and returns the object given to the waiting shell.
 
 #### `(quote x)`, `(quasiquote x)`, `(unquote x)`, `(unquotesplicing x)`
 These all work the way you'd expect.
@@ -68,7 +68,7 @@ A literal hash table looks like this:
 
 ```{a b c d ...}```
 
-In this example, the key `a` is associated with the value `b`, `c` with `d`, etc.
+In this example, the key `a` is associated with the value `b`, `c` with `d`, etc. There must be an even number of expressions between the braces.
 
 Brackets are used as a shorthand to create literal lists:
 
@@ -89,6 +89,56 @@ Container lookups are recursive:
 The contents of a container can be changed with `set`:
 
 ```(set h 'three' 3)``` -> Associates the key 'three' with the value 3 in the hash table `h`. Any previous value of `(h 'three')` is overwritten.
+
+Hash tables cannot contain `nil`, either as a key or a value. Looking up a key that is not present in a hash table produces the value `nil`:
+
+```({'one' 1 'two' 2} 'three')``` -> `nil`
+
+Basic list indices are consecutive integers starting with zero. List indices can be more interesting. Klip supports negative list indices, as in Python:
+
+```(a -1)``` -> Returns the last element in `a`.
+
+List slices can be specified by using a list as an index:
+
+```(a [2 4])``` -> ```[(a 2) (a 3)]``` a list of the elements of `a`, from 2 (inclusive) to 4 (exclusive).
+
+```(set a [2 3] ['fish' 'chips'])``` -> Sets the third and fourth elements of `a` to `'fish'` and `'chips'`, respetively.
+
+Missing ends of a slice are represented with `t`:
+
+```(a [2 t])``` -> The elements of `a`, from 2 (inclusive) to the end of the array.
+
+As in Python, slice specifiers can have one, two or three elements. The three signatures are `[stop]`, `[start, stop]` and `[start, stop, step]`.
+
+```(a [t t -1])``` -> All the elements of `a` in reverse order.
+
+There are several built-in functions that operate on containers.
+
+```(len a)``` -> Returns the length of `a`. The length of a hash table is the number of key/value pairs.
+
+```(items h)``` -> Returns a list of the items in `h`. For a hash table, the items are lists of length 2, representing key/value pairs. For a list, `items` returns a copy of the list.
+
+```(pop a 3)``` -> Removes and returns `(a 3)`. If `a` is a list, the elements after the fourth move down to fill the newly vacated space. 
+
+The argument to `pop` defaults to -1:
+
+```(pop a)``` -> Removes and returns the last element of `a`, if `a` is a list. If `a` is a hash table, this will attempt to remove and return the value associated with the key -1, which is likely not what you want to do.
+
+The following functions only operate on lists.
+
+```(append a 'fish')``` -> Adds `'fish'` to the end of the list.
+
+```(insert a 4 'chips')``` -> Moves the fifth and later elements up, and inserts `'chips'` into the newly vacated space.
+
+#### The `mac` Macro
+
+Klip uses good, old-fashioned unhygienic macros.
+
+```(mac <name> <argument list> <body>)``` -> Defines a macro.
+
+A function is created with the given arugment list and body. From now on, when the compiler finds an expression whose head is equal to `name`, it will call this function on the rest of the expression, and compile the return value of that function instead of the original expression.
+
+Actually, the system is slightly more general. The compiler doesn't interact with specific macros. For _every_ expression it encounters, it checks for a variable called `macex` in the global environment. If if finds such a variable, it calls it on the expression and compiles the result. The core library binds `macex` to a function that implements the system described above. `mac` is itself a macro registered using this scheme.
 
 #### The `if` Macro
 This is similar to the `cond` form in some Lisp dialects and the `if` macro in Arc.
