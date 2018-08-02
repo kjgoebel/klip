@@ -46,7 +46,7 @@ The entire parameter list can be a symbol:
 Assigns the value of the given expression to the given symbol. The value of the `assign` form is `nil`.
 
 #### ```(get-safe <symbol>)```
-Evaluates to the current value of the given symbol, or `nil` if the symbol is undefined.
+Evaluates to the current value of the given symbol, or `nil` if the symbol is unbound.
 
 #### ```(ccc <function of one parameter>)```
 Stands for Call with Current Continuation. It calls the function, passing it the current continuation. This is a first-order continuation that can be called more than once and from outside the `ccc` form. The value of the `ccc` form is either the return value of the given function or the value passed to the continuation when it's called.
@@ -141,7 +141,7 @@ A function is created with the given arugment list and body. From now on, when t
 Actually, the system is slightly more general. The compiler doesn't interact with specific macros. For _every_ expression it encounters, it checks for a variable called `macex` in the global environment. If if finds such a variable, it calls it on the expression and compiles the result. The core library binds `macex` to a function that implements the system described above. `mac` is itself a macro registered using this scheme.
 
 #### The `if` Macro
-This is similar to the `cond` form in some Lisp dialects and the `if` macro in Arc.
+This is similar to the `cond` form in some Lisp dialects and the `if` form in Arc.
 
 ```(if)``` -> `nil`
 
