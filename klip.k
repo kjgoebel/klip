@@ -81,15 +81,23 @@
 	`(ccc (fn (,sym) ;body)))
 
 
-#This definition would be cleaner if let was already defined, but we need it to define let.
+(mac eat (seq it (body))
+	(
+		(fn (break temp)
+			`(wcc ,break
+				(_let ,temp (iterator ,seq)
+					(_let ,it (fn ((ret nil)) (,temp ,break ret))
+						(forever ;body)))))
+		(uniq)
+		(uniq)))
+
+
 (mac _with (args (body))
 	(
 		(fn (syms vals)
-			(wcc done
-				(_let it (iterator args)
-					(forever
-						(append syms (it done))
-						(append vals (it done)))))
+			(eat args it
+				(append syms (it))
+				(append vals (it)))
 			`(
 				(fn (;syms)
 					;body)
@@ -113,12 +121,11 @@
 		
 		`(_let ,(xprs 0) ,(xprs 1) ;(xprs [2 t]))))
 
+
 (def map1 (f l)
 	(_let ret []			#So, this is the ugliest thing in consless Lisp. It's not functional code. But something like (+ [(f (l 0))] (map1 (l [1 t]))) would be slow.
-		(wcc return
-			(_let it (iterator l)
-				(forever
-					(append ret (f (it return))))))
+		(eat l it
+			(append ret (f (it))))
 		ret))
 
 
@@ -131,15 +138,6 @@
 		`(
 			(fn (,(xprs 0)) ;(xprs [1 t]))
 			(uniq ~,(xprs 0)))))
-
-
-(mac eat (seq it (body))
-	(wuq (break temp)
-		`(wcc ,break
-			(let (
-					(,temp (iterator ,seq))
-					(,it (fn ((ret nil)) (,temp ,break ret))))
-				(forever ;body)))))
 
 
 
