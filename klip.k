@@ -122,8 +122,8 @@
 		ret))
 
 
-#Short for let-unique. First arg is a symbol or a list of symbols.
-(mac luq xprs
+#Short for With UniQue. First arg is a symbol or a list of symbols.
+(mac wuq xprs
 	(if (list? (xprs 0))
 		`(
 			(fn ,(xprs 0) ;(xprs [1 t]))
@@ -133,10 +133,20 @@
 			(uniq ~,(xprs 0)))))
 
 
+(mac eat (seq it (body))
+	(wuq (break temp)
+		`(wcc ,break
+			(let (
+					(,temp (iterator ,seq))
+					(,it (fn ((ret nil)) (,temp ,break ret))))
+				(forever ;body)))))
+
+
+
 (assign place-table {})
 
 (mac def-place (name xpr-name (body))
-	(luq xpr
+	(wuq xpr
 		`(set place-table ~,name
 			(fn (,xpr)
 				(let ,xpr-name (,xpr [1 t])
@@ -146,7 +156,7 @@
 (def =forms (place)
 	(if
 		(== (type? place) ~sym)
-		(luq (oldx newx)
+		(wuq (oldx newx)
 			[
 				[oldx `(get-safe ,place)]
 				oldx
@@ -157,7 +167,7 @@
 		(let form-func (place-table (place 0))
 			(if form-func
 				(form-func place)
-				(luq (oldx newx)
+				(wuq (oldx newx)
 					[
 						[oldx place]
 						oldx
@@ -201,7 +211,7 @@
 	`(if ,cond (do ;body)))
 
 (mac while (cond (body))
-	(luq temp
+	(wuq temp
 		`(
 			(rfn ,temp ()
 				(when ,cond
@@ -209,7 +219,7 @@
 					(,temp))))))
 
 (mac dowhile (cond (body))
-	(luq temp
+	(wuq temp
 		`(
 			(rfn ,temp ()
 				;body
@@ -220,7 +230,7 @@
 #That value is returned when the condition returns false. (This is for 
 #rejection method randomization.)
 (mac xwhile (x cond (body))
-	(luq temp
+	(wuq temp
 		`(
 			(rfn ,temp ()
 				(let ,x (do ;body)
@@ -231,7 +241,7 @@
 
 (mac or args
 	(if args
-		(luq temp
+		(wuq temp
 			`(iflet ,temp ,(args 0)
 				,temp
 				(or ;(args [1 t]))))))
@@ -243,25 +253,21 @@
 			(args 0))
 		t))
 
+
+#Note that these are considerably slower using the eat macro.
 (mac each (x seq (body))
-	(luq (it return _seq)
-		`(let ,_seq ,seq
-			(wcc ,return
-				(let ,it (iterator ,_seq)
-					(forever
-						(let ,x (,it ,return)
-							;body)))))))
+	(wuq it
+		`(eat ,seq ,it
+			(let ,x (,it)
+				;body))))
 
 (mac eachpair (x y seq (body))
-	(luq (it return _seq)
-		`(let ,_seq ,seq
-			(if
-				(wcc ,return
-					(let ,it (iterator ,_seq)
-						(forever
-							(let (,x (,it ,return) ,y (,it ,return t))
-								;body))))
-				(prn 'WARNING: eachpair invoked on a sequence with an odd number of elements.')))))
+	(wuq it
+		`(if
+			(eat ,seq ,it
+				(let (,x (,it) ,y (,it t))
+					;body))
+			(prn 'WARNING: eachpair invoked on a sequence with an odd number of elements.'))))
 
 
 (def even? (n)
@@ -273,7 +279,7 @@
 #This stores fns in a literal hash, rather than the horror of if elif elif 
 #elif ... else. So all cases take the same (short) amount of time to run.
 (mac case (var (rest))
-	(luq choice
+	(wuq choice
 		(let
 			(
 				xpdict {}
@@ -297,17 +303,18 @@
 #(for i [1 3] ...) -> 1, 2
 #(for i [1 10 2] ...) -> 1, 3, 5, 7, 9
 #(for i (+ 1 2) ...) -> 0, 1, 2
-(mac for (i r (body))
-	(let forfunc
-		(fn (i start stop step body)
-			(luq (_start _stop _step op)
-				`(let
-					(
-						(,_start ,start ,_stop ,stop ,_step ,step)
-						(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
-					(while (,op ,i ,_stop)
-						;body
-						(++ ,i ,_step)))))
+
+(let forfunc
+	(fn (i start stop step body)
+		(wuq (_start _stop _step op)
+			`(let
+				(
+					(,_start ,start ,_stop ,stop ,_step ,step)
+					(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
+				(while (,op ,i ,_stop)
+					;body
+					(++ ,i ,_step)))))
+	(mac for (i r (body))
 		(if (and (list? r) (== (r 0) ~list))
 			(case (len r)
 				2 (forfunc i 0 (r 1) 1 body)
@@ -352,7 +359,7 @@
 
 
 (mac gen (i r (body))
-	(luq ret
+	(wuq ret
 		`(let ,ret []
 			(for ,i ,r
 				(append ,ret (do ;body)))
@@ -361,7 +368,7 @@
 (pluralize 2 gen gens)
 
 (mac nof (r (body))
-	(luq i `(gen ,i ,r ;body)))
+	(wuq i `(gen ,i ,r ;body)))
 
 (pluralize 1 nof nofs)
 
@@ -484,7 +491,7 @@
 #MORE STUFF
 
 (mac time-it body
-	(luq start
+	(wuq start
 		`(let ,start (time)
 			;body
 			(- (time) ,start))))
