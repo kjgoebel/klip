@@ -379,34 +379,21 @@
 				(append ret sub)))
 		ret))
 
+(let _flatten
+	(rfn self (ret arg)
+		(if (list? arg)
+			(each sub arg
+				(self ret sub))
+			(append ret arg)))
+	(def flatten args
+		(let ret []
+			(each arg args
+				(_flatten ret arg))
+			ret)))
 
 
 
 #MAPPING
-
-(def _map (f args groups)
-	(if groups
-		(let
-			(
-				ret []
-				rest (groups [1 t]))
-			(wcc break
-				(let
-					(
-						(group
-							(let temp (groups 0)
-								(if (list? (temp 0)) temp [temp])))
-						(its
-							(map1
-								(fn (seq) (iterator seq))
-								group)))
-					(forever
-						(append ret (_map
-							f
-							(join (map1 (fn (it) (it break)) its) args)
-							rest)))))
-			ret)
-		(apply f args)))
 
 #Industrial strength mapping function. Each group is a dimension in the final 
 #sequence. Each group can be a list, or a list of lists. If it's a list of 
@@ -418,8 +405,33 @@
 #	[(f 1 4) (f 1 5) (f 1 6)]
 #	[(f 2 4) (f 2 5) (f 2 6)]
 #	[(f 3 4) (f 3 5) (f 3 6)]]
-(def map (f (groups))
-	(_map f [] groups))
+
+(let _map
+	(rfn self (f args groups)
+		(if groups
+			(let
+				(
+					ret []
+					rest (groups [1 t]))
+				(wcc break
+					(let
+						(
+							(group
+								(let temp (groups 0)
+									(if (list? (temp 0)) temp [temp])))
+							(its
+								(map1
+									(fn (seq) (iterator seq))
+									group)))
+						(forever
+							(append ret (self
+								f
+								(join (map1 (fn (it) (it break)) its) args)
+								rest)))))
+				ret)
+			(apply f args)))
+	(def map (f (groups))
+		(_map f [] groups)))
 
 
 
