@@ -14,25 +14,73 @@ class Inst(object):
 
 
 
-#Next improvements:
-#1. Compiler will know parms, locals, inherited and willBeInherited. So Asm can 
-#just take those as arguments. Asm can then figure out what kind of load/store 
-#needs to be done. load x -> LOAD_FAST index(self.locals, 'x') if x is not in 
-#willBeInherited, and that sort of thing. The question is whether this is Asm's 
-#job or the compiler's. Either way, the code that translates names into 
-#indices should be in the same class as the code that chooses between 
-#LOAD_FAST, LOAD_DEREF, etc.
-#2. add and adda are dumb. There should be a dict {opname : how to calculate 
-#what it does to the stack} in Asm.
+def _makeFunctionStack(arg):
+	ret = 2
+	if arg & 0x01:
+		ret += 1
+	if arg & 0x02:
+		ret += 1
+	if arg & 0x04:
+		ret += 1
+	if arg & 0x08:
+		ret += 1
+	return ret
 
 class Asm(object):
-	def __init__(self, parms, inherited, willBeInherited, doc = ''):
+	_stackDelta = {
+		'NOP' : 0,
+		'POP_TOP' : -1,
+		'ROT_TWO' : 0,
+		'ROT_THREE' : 0,
+		'DUP_TOP' : 1,
+		'LIST_APPENT' : -1,
+		'SET_ADD' : -1,
+		'MAP_ADD' : -2,
+		'RETURN_VALUE' : -1,
+		'STORE_GLOBAL' : -1,
+		'LOAD_CONST' : 1,
+		'LOAD_NAME' : 1,
+		'BUILD_TUPLE' : lambda arg: -arg,
+		'BUILD_LIST' : lambda arg: -arg,
+		'BUILD_MAP' : lambda arg: -2 * arg,
+		'BUILD_STRING' : lambda arg: -arg,
+		'BUILD_TUPLE_UNPACK_WITH_CALL' : lambda arg: -(arg + 1),
+		'BUILD_LIST_UNPACK' : lambda arg: -arg,
+		'LOAD_ATTR' : 0,
+		'JUMP_FORWARD' : 0,
+		'POP_JUMP_IF_TRUE' : -1,
+		'POP_JUMP_IF_FALSE' : -1,
+		'JUMP_ABSOLUTE' : 0,
+		'LOAD_GLOBAL' : 1,
+		'LOAD_FAST' : 1,
+		'STORE_FAST' : -1,
+		'LOAD_CLOSURE' : 1,
+		'LOAD_DEREF' : 1,
+		'STORE_DEREF' : -1,
+		'RAISE_VARARGS' : lambda arg: -arg,
+		'CALL_FUNCTION' : lambda arg: -arg,
+		'MAKE_FUNCTION' : _makeFunctionStack,
+		'BUILD_SLICE' : lambda arg: -(arg - 1),
+	}
+	
+	def __init__(self,
+			parms,				#parameters, including those with default values.
+			restParm,			#the name of the rest parameter.
+			otherLocals,		#other variables local to the function, including those in heritable.
+			inherited,			#variables inherited from surrounding functions.
+			heritable,			#variables that a nested function will inherit.
+			doc = ''
+	):
 		self.parms = parms
-		self.locals = parms + []		#Vars local to this function.
-		self.inherited = inherited		#Vars inherited from outer functions.
-		self.globals = []				#Includes attribute names.
-		self.constants = [doc]			#Constants
-		self.willBeInherited = willBeInherited	#Vars that will be inherited by nested functions.
+		self.restParm = restParm
+		if restParm:
+			self.locals = parms + [restParm] + otherLocals
+		else:
+			self.locals = parms + otherLocals
+		self.inherited = inherited
+		self.heritable = heritable
+		self.names = []
+		self.constants = [doc]
 		
 		self.labels = {}
 		self.instrs = []
@@ -40,14 +88,12 @@ class Asm(object):
 		self.stackHeight = 0
 		self.maxStack = 0
 	
-	def add(self, opname, delta):
-		self.adda(opname, None, delta)
-	
-	def adda(self, opname, arg, delta):
-		f = self._opVarMap.get(opname, lambda self, x: x)
-		arg = f(self, arg)
-		
+	def add(self, opname, arg = None):
 		self.instrs.append(Inst(opname, arg))
+		
+		delta = self._stackDelta[opname]
+		if callable(delta):
+			delta = delta(arg)
 		
 		self.stackHeight += delta
 		if self.stackHeight > self.maxStack:
@@ -55,6 +101,44 @@ class Asm(object):
 	
 	def label(self, name):
 		self.labels[len(self.instrs)] = name
+	
+	def _getVar(self, name):
+		if name in self.inherited:
+			return '_DEREF', self.inherited.index(name)
+		if name in self.heritable:
+			return '_DEREF', len(self.inherited) + self.heritable.index(name)
+		if name in self.locals:
+			return '_FAST', self.locals.index(name)
+		if name in self.names:
+			ix = self.names.index(name)
+		else:
+			ix = len(self.names)
+			self.names.append(name)
+		return '_GLOBAL', ix
+	
+	def load(self, name):
+		ending, ix = self._getVar(name)
+		self.add('LOAD' + ending, ix)
+	
+	def store(self, name):
+		ending, ix = self._getVar(name)
+		self.add('STORE' + ending, ix)
+	
+	def const(self, value):
+		if value in self.constants:
+			self.add('LOAD_CONST', self.constants.index(value))
+		else:
+			ix = len(self.constants)
+			self.constants.append(value)
+			self.add('LOAD_CONST', ix)
+	
+	def cell(self, name):
+		if name in self.inherited:
+			self.add('LOAD_CLOSURE', self.inherited.index(name))
+		elif name in self.heritable:
+			self.add('LOAD_CLOSURE', len(self.inherited) + self.heritable.index(name))
+		else:
+			raise ValueError('Cell variable %s not found.' % name)
 	
 	def make(self):
 		size = 0
@@ -83,14 +167,14 @@ class Asm(object):
 			0,
 			self.make(),
 			tuple(self.constants),
-			tuple(self.globals),
+			tuple(self.names),
 			tuple(self.locals),
 			'<string>',
 			'f',
 			1,
 			b'',
 			tuple(self.inherited),
-			tuple(self.willBeInherited)
+			tuple(self.heritable)
 		)
 	
 	def makeF(self, globals, closure):
@@ -101,89 +185,46 @@ class Asm(object):
 			None,
 			closure
 		)
-	
-	def _getVar(self, arg, varList):
-		try:
-			return varList.index(arg)
-		except ValueError:
-			ret = len(varList)
-			varList.append(arg)
-			return ret
-	
-	def _getConst(self, arg):
-		return self._getVar(arg, self.constants)
-	
-	def _getLocal(self, arg):
-		return self._getVar(arg, self.locals)
-	
-	def _getGlobal(self, arg):
-		return self._getVar(arg, self.globals)
-	
-	def _getCell(self, arg):
-		if arg in self.inherited:
-			return self._getVar(arg, self.inherited)
-		if arg in self.willBeInherited:
-			return self._getVar(arg, self.willBeInherited)
-		raise ValueError("%s doesn't seem to be a cell var." % arg)
-	
-	_opVarMap = {
-		'LOAD_CONST' : _getConst,
-		'LOAD_FAST' : _getLocal,
-		'STORE_FAST' : _getLocal,
-		'LOAD_DEREF' : _getCell,
-		'STORE_DEREF' : _getCell,
-		'LOAD_CLOSURE' : _getCell,
-		'LOAD_GLOBAL' : _getGlobal,
-		'STORE_GLOBAL' : _getGlobal,
-		'LOAD_NAME' : _getGlobal,
-		'LOAD_ATTR' : _getGlobal,
-		'STORE_ATTR' : _getGlobal,
-	}
 
 
 if __name__ == '__main__':
-	# a = Asm(['x'])
+	gAsm = Asm(
+		['y'],
+		None,
+		[],
+		['x'],
+		[],
+	)
 	
-	# a.adda('LOAD_GLOBAL', 'len', 1)
-	# a.adda('LOAD_FAST', 'x', 1)
-	# a.adda('CALL_FUNCTION', 1, -2)
-	# a.add('RETURN_VALUE', -1)
-	
-	# print(a.maxStack)
-	
-	# b = a.make()
-	# print(b)
-	# dis.dis(b)
-	
-	# f = a.makeF({'len' : len}, None)
-	
-	# print(f([1, 2, 3]))
-	
-	gAsm = Asm(['y'], ['x'], [])
-	
-	gAsm.adda('LOAD_GLOBAL', 'print', 1)
-	gAsm.adda('LOAD_DEREF', 'x', 1)
-	gAsm.adda('LOAD_FAST', 'y', 1)
-	gAsm.adda('CALL_FUNCTION', 2, -3)
-	gAsm.add('RETURN_VALUE', -1)
+	gAsm.load('print')
+	gAsm.load('x')
+	gAsm.load('y')
+	gAsm.add('CALL_FUNCTION', 2)
+	gAsm.add('RETURN_VALUE')
 	
 	gCode = gAsm.makeC()
 	print(dis.dis(gCode))
 	
-	fAsm = Asm(['x'], [], ['x'])
+	fAsm = Asm(
+		['x'],
+		None,
+		[],
+		[],
+		['x'],
+	)
 	
-	fAsm.adda('LOAD_CLOSURE', 'x', 1)
-	fAsm.adda('BUILD_TUPLE', 1, 0)
-	fAsm.adda('LOAD_CONST', gCode, 1)
-	fAsm.adda('LOAD_CONST', 'f.g', 1)
-	fAsm.adda('MAKE_FUNCTION', 0x8, -3)
-	fAsm.add('DUP_TOP', 1)		#Note that g isn't stored anywhere. This is fine only because it's not inherited.
-	fAsm.adda('LOAD_CONST', 5, 1)
-	fAsm.adda('CALL_FUNCTION', 1, -2)
-	fAsm.add('POP_TOP', -1)
-	fAsm.adda('LOAD_CONST', 7, 1)
-	fAsm.adda('CALL_FUNCTION', 1, -2)
-	fAsm.add('RETURN_VALUE', -1)
+	fAsm.cell('x')
+	fAsm.add('BUILD_TUPLE', 1)
+	fAsm.const(gCode)
+	fAsm.const('f.g')
+	fAsm.add('MAKE_FUNCTION', 0x8)
+	fAsm.add('DUP_TOP')		#Note that g isn't stored anywhere. This is fine only because it's not inherited.
+	fAsm.const(5)
+	fAsm.add('CALL_FUNCTION', 1)
+	fAsm.add('POP_TOP')
+	fAsm.const(7)
+	fAsm.add('CALL_FUNCTION', 1)
+	fAsm.add('RETURN_VALUE')
 	
 	f = fAsm.makeF(
 		{'print' : print},
