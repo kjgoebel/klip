@@ -6,7 +6,7 @@ class Halt(Exception):
 		self.value = value
 
 def justHalt(value):
-	raise Halt(value)
+	raise Halt(nil)
 
 class TailCallError(Exception):
 	pass
