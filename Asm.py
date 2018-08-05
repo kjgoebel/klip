@@ -14,16 +14,22 @@ class Inst(object):
 
 
 
-def _makeFunctionStack(arg):
-	ret = 2
+def _callFunctionExStack(arg):
+	ret = -1
 	if arg & 0x01:
-		ret += 1
+		ret -= 1
+	return ret
+
+def _makeFunctionStack(arg):
+	ret = -1
+	if arg & 0x01:
+		ret -= 1
 	if arg & 0x02:
-		ret += 1
+		ret -= 1
 	if arg & 0x04:
-		ret += 1
+		ret -= 1
 	if arg & 0x08:
-		ret += 1
+		ret -= 1
 	return ret
 
 class Asm(object):
@@ -33,19 +39,20 @@ class Asm(object):
 		'ROT_TWO' : 0,
 		'ROT_THREE' : 0,
 		'DUP_TOP' : 1,
-		'LIST_APPENT' : -1,
+		'LIST_APPEND' : -1,
 		'SET_ADD' : -1,
 		'MAP_ADD' : -2,
 		'RETURN_VALUE' : -1,
+		'UNPACK_SEQUENCE' : lambda arg: arg - 1,
 		'STORE_GLOBAL' : -1,
 		'LOAD_CONST' : 1,
 		'LOAD_NAME' : 1,
-		'BUILD_TUPLE' : lambda arg: -arg,
-		'BUILD_LIST' : lambda arg: -arg,
-		'BUILD_MAP' : lambda arg: -2 * arg,
-		'BUILD_STRING' : lambda arg: -arg,
-		'BUILD_TUPLE_UNPACK_WITH_CALL' : lambda arg: -(arg + 1),
-		'BUILD_LIST_UNPACK' : lambda arg: -arg,
+		'BUILD_TUPLE' : lambda arg: -arg + 1,
+		'BUILD_LIST' : lambda arg: -arg + 1,
+		'BUILD_MAP' : lambda arg: -2 * arg + 1,
+		'BUILD_STRING' : lambda arg: -arg + 1,
+		'BUILD_TUPLE_UNPACK_WITH_CALL' : lambda arg: -arg + 1,
+		'BUILD_LIST_UNPACK' : lambda arg: -arg + 1,
 		'LOAD_ATTR' : 0,
 		'JUMP_FORWARD' : 0,
 		'POP_JUMP_IF_TRUE' : -1,
@@ -59,6 +66,7 @@ class Asm(object):
 		'STORE_DEREF' : -1,
 		'RAISE_VARARGS' : lambda arg: -arg,
 		'CALL_FUNCTION' : lambda arg: -arg,
+		'CALL_FUNCTION_EX' : _callFunctionExStack,
 		'MAKE_FUNCTION' : _makeFunctionStack,
 		'BUILD_SLICE' : lambda arg: -(arg - 1),
 	}
@@ -66,7 +74,7 @@ class Asm(object):
 	def __init__(self,
 			parms,				#parameters, including those with default values.
 			restParm,			#the name of the rest parameter.
-			otherLocals,		#other variables local to the function, including those in heritable.
+			#otherLocals,		#other variables local to the function, including those in heritable.
 			inherited,			#variables inherited from surrounding functions.
 			heritable,			#variables that a nested function will inherit.
 			doc = ''
@@ -74,9 +82,9 @@ class Asm(object):
 		self.parms = parms
 		self.restParm = restParm
 		if restParm:
-			self.locals = parms + [restParm] + otherLocals
+			self.locals = parms + [restParm]
 		else:
-			self.locals = parms + otherLocals
+			self.locals = parms
 		self.inherited = inherited
 		self.heritable = heritable
 		self.names = []
@@ -96,6 +104,8 @@ class Asm(object):
 			delta = delta(arg)
 		
 		self.stackHeight += delta
+		if self.stackHeight < 0:
+			raise ValueError('Stack height is now negative.')
 		if self.stackHeight > self.maxStack:
 			self.maxStack = self.stackHeight
 	
@@ -132,6 +142,14 @@ class Asm(object):
 			self.constants.append(value)
 			self.add('LOAD_CONST', ix)
 	
+	def attr(self, value):
+		if value in self.names:
+			self.add('LOAD_ATTR', self.names.index(value))
+		else:
+			ix = len(self.names)
+			self.names.append(value)
+			self.add('LOAD_ATTR', ix)
+	
 	def cell(self, name):
 		if name in self.inherited:
 			self.add('LOAD_CLOSURE', self.inherited.index(name))
@@ -141,6 +159,9 @@ class Asm(object):
 			raise ValueError('Cell variable %s not found.' % name)
 	
 	def make(self):
+		if self.stackHeight != 0:
+			print('WARNING: Stack is not empty.')
+		
 		size = 0
 		labelValues = {}
 		
@@ -158,7 +179,7 @@ class Asm(object):
 		
 		return b''.join([inst.make() for inst in self.instrs])
 	
-	def makeC(self):
+	def makeC(self, name):
 		return types.CodeType(
 			len(self.parms),
 			0,
@@ -170,18 +191,18 @@ class Asm(object):
 			tuple(self.names),
 			tuple(self.locals),
 			'<string>',
-			'f',
+			name,
 			1,
 			b'',
 			tuple(self.inherited),
 			tuple(self.heritable)
 		)
 	
-	def makeF(self, globals, closure):
+	def makeF(self, name, globals, closure):
 		return types.FunctionType(
-			self.makeC(),
+			self.makeC(name),
 			globals,
-			'f',
+			name,
 			None,
 			closure
 		)
@@ -191,7 +212,6 @@ if __name__ == '__main__':
 	gAsm = Asm(
 		['y'],
 		None,
-		[],
 		['x'],
 		[],
 	)
@@ -204,11 +224,11 @@ if __name__ == '__main__':
 	
 	gCode = gAsm.makeC()
 	print(dis.dis(gCode))
+	print('max stack', gAsm.maxStack)
 	
 	fAsm = Asm(
 		['x'],
 		None,
-		[],
 		[],
 		['x'],
 	)
@@ -227,10 +247,12 @@ if __name__ == '__main__':
 	fAsm.add('RETURN_VALUE')
 	
 	f = fAsm.makeF(
+		'f',
 		{'print' : print},
 		None
 	)
 	print(dis.dis(f))
+	print('max stack', fAsm.maxStack)
 	
 	print(f(9))
 	
