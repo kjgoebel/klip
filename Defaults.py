@@ -9,21 +9,21 @@ class DefaultError(Exception):
 
 
 def _no(k, arg):
-	raise TailCall(k, t if klipFalse(arg) else nil)
+	return k, t if klipFalse(arg) else nil
 
 def _prn(k, *args):
 	print(*args)
-	raise TailCall(k, nil)
+	return k, nil
 
 def _prnr(k, *args):
 	print(*map(repr, args))
-	raise TailCall(k, nil)
+	return k, nil
 
 def _apply(k, f, args):
-	raise TailCall(f, k, *args)
+	return tuple((f, k, *args))
 
 def _list(k, *args):
-	raise TailCall(k, KlipList(args))
+	return k, KlipList(args)
 
 _typeDict = {k : Sym(v) for k, v in {
 	int : 'int',
@@ -36,59 +36,59 @@ _typeDict = {k : Sym(v) for k, v in {
 
 def _typeq(k, arg):
 	try:
-		raise TailCall(k, _typeDict[type(arg)])
+		return k, _typeDict[type(arg)]
 	except KeyError:
 		if callable(arg):
-			raise TailCall(k, Sym('func'))
+			return k, Sym('func')
 		raise DefaultError('Unknown object type %s (%s).' % (arg, type(arg)))
 
 
 def _items(k, con):
 	if isa(con, KlipList):
-		raise TailCall(k, KlipList(con[:]))
+		return k, KlipList(con[:])
 	elif isa(con, KlipHash):
-		raise TailCall(k, KlipList([KlipList([k, v]) for k, v in con.items()]))
+		return k, KlipList([KlipList([k, v]) for k, v in con.items()])
 	elif isa(con, KlipStr):
-		raise TailCall(k, KlipList([x for x in con]))
+		return k, KlipList([x for x in con])
 	else:
 		raise ValueError("Can't get items from %s." % con)
 
 def _len(k, con):
-	raise TailCall(k, len(con))
+	return k, len(con)
 
 def _set(k, con, ix, value):
-	raise TailCall(k, con.set(ix, value))
+	return k, con.set(ix, value)
 
 def _insert(k, con, ix, value):
-	raise TailCall(k, con.insert(ix, value))
+	return k, con.insert(ix, value)
 
 def _pop(k, con, ix = -1):
-	raise TailCall(k, con.pop(ix))
+	return k, con.pop(ix)
 
 def _append(k, con, value):
-	raise TailCall(k, con.append(value))
+	return k, con.append(value)
 
 
 _uniqCounter = 0
 def _uniq(k, sym = None):
 	global _uniqCounter
 	_uniqCounter += 1
-	raise TailCall(k, Sym(' gs%d%s' % (_uniqCounter, sym.pyx() if sym else '')))
+	return k, Sym(' gs%d%s' % (_uniqCounter, sym.pyx() if sym else ''))
 
 
 def _bnot(k, arg):
 	if not isa(arg, int):
 		raise DefaultError("Can't use bnot on an object of type %s." % type(arg))
-	raise TailCall(k, ~arg)
+	return k, ~arg
 
 def _time(k):
-	raise TailCall(k, time.time())
+	return k, time.time()
 
 def _rand(k, *args):
-	raise TailCall(k, random.randrange(*args))
+	return k, random.randrange(*args)
 
 def _randf(k):
-	raise TaiLCall(k, random.random())
+	return k, random.random()
 
 
 genv = GlobalEnv({
@@ -130,7 +130,7 @@ def _binOp(name, op, allowedTypes):
 		for arg in args:
 			if not type(arg) in allowedTypes:
 				raise DefaultError("Can't use operator %s on an object of type %s." % (name, type(arg)))
-		raise TailCall(k, op(*args))
+		return k, op(*args)
 	genv.set(name, temp)
 
 def _accOp(name, op, default, allowedTypes):
@@ -140,7 +140,7 @@ def _accOp(name, op, default, allowedTypes):
 			if not type(arg) in allowedTypes:
 				raise DefaultError("Can't use operator %s on an object of type %s." % (name, type(arg)))
 			ret = op(ret, arg)
-		raise TailCall(k, ret)
+		return k, ret
 	genv.set(name, temp)
 
 def _antiAccOp(name, op, default, allowedTypes):
@@ -155,20 +155,20 @@ def _antiAccOp(name, op, default, allowedTypes):
 			raise DefaultError("Can't apply operator %s to zero objects." % name)
 		
 		if n == 1:
-			raise TailCall(k, op(default, args[0]))
+			return k, op(default, args[0])
 		
 		ret = args[0]
 		for arg in args[1:]:
 			ret = op(ret, arg)
-		raise TailCall(k, ret)
+		return k, ret
 	genv.set(name, temp)
 
 def _compOp(name, op):
 	def temp(k, *args):
 		for i in range(len(args) - 1):
 			if not op(args[i], args[i+1]):
-				raise TailCall(k, nil)
-		raise TailCall(k, t)
+				return k, nil
+		return k, t
 	genv.set(name, temp)
 
 
