@@ -222,7 +222,7 @@ if __name__ == '__main__':
 	gAsm.add('CALL_FUNCTION', 2)
 	gAsm.add('RETURN_VALUE')
 	
-	gCode = gAsm.makeC()
+	gCode = gAsm.makeC('g')
 	print(dis.dis(gCode))
 	print('max stack', gAsm.maxStack)
 	
