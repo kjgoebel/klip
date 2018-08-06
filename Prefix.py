@@ -6,14 +6,6 @@ if not hasattr(builtins, '_prefix'):
 	builtins.isa = isinstance
 	
 	
-	class TailCall(Exception):
-		def __init__(self, f, k, *args):
-			self.f = f
-			self.k = k
-			self.args = args
-	builtins.TailCall = TailCall
-	
-	
 	
 	import string
 	_allowed = set(string.ascii_letters + string.digits)
@@ -52,13 +44,13 @@ if not hasattr(builtins, '_prefix'):
 			try:
 				item = self[args[0]]
 			except IndexError:
-				raise TailCall(k, nil)
+				return k, nil
 			except KeyError:
-				raise TailCall(k, nil)
+				return k, nil
 			
 			if len(args) > 1:
-				raise TailCall(item, k, *args[1:])
-			raise TailCall(k, item)
+				return tuple((item, k, *args[1:]))
+			return k, item
 	
 	def _makeIx(ix):
 		if isa(ix, KlipList):
@@ -169,7 +161,7 @@ if not hasattr(builtins, '_prefix'):
 	
 	class KlipStr(str):
 		def __call__(self, k, *args):
-			raise TailCall(k, KlipStr(self % args))
+			return k, KlipStr(self % args)
 		def __repr__(self):
 			return 'KlipStr("%s")' % self
 	builtins.KlipStr = KlipStr

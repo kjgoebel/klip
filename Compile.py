@@ -151,15 +151,15 @@ class Compiler(object):
 				defMeth = self.nextMethName()
 				
 				self.line(2, 'if self.get("%s") is self.%s:' % (parm, dummyName))
-				self.line(3, 'raise TailCall(self.%s, None)' % defMeth)
+				self.line(3, 'return self.%s, None' % defMeth)
 				self.line(2, 'else:')
-				self.line(3, 'raise TailCall(self.%s, None)' % afterMeth)
+				self.line(3, 'return self.%s, None' % afterMeth)
 				
 				self.line(1, 'def %s(self, dummy):' % (defMeth))
 				ci = self.c_xpr(xpr, ctx)
 				#ci can't be None
 				self.line(2, 'self.setLocal("%s", %s)' % (parm, ci.pyx))
-				self.line(2, 'raise TailCall(self.%s, None)' % afterMeth)
+				self.line(2, 'return self.%s, None' % afterMeth)
 				
 				self.line(1, 'def %s(self, dummy):' % (afterMeth))
 			
@@ -193,10 +193,10 @@ class Compiler(object):
 		Internal.internals[fnName] = (parmList, body)
 		
 		methName = self.nextMethName()
-		k = 'self.makeCont(self.%s)' % methName
+		k = 'self.%s' % methName
 		
 		self.comment('%s, %s' % (parmList, body))
-		self.line(2, 'raise TailCall(compFunc, %s, self, *%s)' % (k, fnName))
+		self.line(2, 'return tuple((compFunc, %s, self, *%s))' % (k, fnName))
 		
 		self.line(1, 'def %s(self, ret):' % methName)
 		return self.finish('ret', ctx, True)
@@ -213,27 +213,27 @@ class Compiler(object):
 			cont = 'self.get(" cont")'
 		else:
 			finalMeth = self.nextMethName()
-			cont = 'self.makeCont(self.%s)' % finalMeth
+			cont = 'self.%s' % finalMeth
 		
 		if alternative:
 			alternativeMeth = self.nextMethName()
-			self.line(3, 'raise TailCall(self.%s, None)' % (alternativeMeth))
+			self.line(3, 'return self.%s, None' % (alternativeMeth))
 		else:
-			self.line(3, 'raise TailCall(%s, nil)' % cont)
+			self.line(3, 'return %s, nil' % cont)
 		self.line(2, 'else:')
 		resultMeth = self.nextMethName()
-		self.line(3, 'raise TailCall(self.%s, None)' % (resultMeth))
+		self.line(3, 'return self.%s, None' % (resultMeth))
 		
 		self.line(1, 'def %s(self, k):' % resultMeth)
 		ci = self.c_xpr(result, ctx)
 		if ci:
-			self.line(2, 'raise TailCall(%s, %s)' % (cont, ci.pyx))
+			self.line(2, 'return %s, %s' % (cont, ci.pyx))
 		
 		if alternative:
 			self.line(1, 'def %s(self, k):' % alternativeMeth)
 			ci = self.c_xpr(alternative, ctx)
 			if ci:
-				self.line(2, 'raise TailCall(%s, %s)' % (cont, ci.pyx))
+				self.line(2, 'return %s, %s' % (cont, ci.pyx))
 		
 		if ctx.tail:
 			return None
@@ -245,7 +245,7 @@ class Compiler(object):
 		ci = self.c_xpr(rest[0], ctx.derive(tail = False))
 		#ci cannot be None
 		cont = self.nextMethName()
-		self.line(2, 'raise TailCall(%s, self.makeCont(self.%s), self.makeDummyCont(self.%s))' % (ci.pyx, cont, cont))
+		self.line(2, 'return %s, self.%s, self.makeExplicitCont(self.%s)' % (ci.pyx, cont, cont))
 		
 		self.line(1, 'def %s(self, ret):' % cont)
 		return self.finish('ret', ctx, True)
@@ -327,7 +327,7 @@ class Compiler(object):
 		if ctx.tail:
 			pyArgs.insert(1, 'self.get(" cont")')
 		else:
-			pyArgs.insert(1, 'self.makeCont(self.%s)' % methName)
+			pyArgs.insert(1, 'self.%s' % methName)
 		self.doCall(pyArgs, ctx)
 		[self.temp.rem(key) for key, ix in temps]			#Deleting all temps is only correct because parms aren't temped. If parms are temped, we need to know the last time a parm is used in the function.
 		
@@ -412,9 +412,9 @@ class Compiler(object):
 			# if ctx.tail:
 				# pyArgs.insert(1, 'self.get(" cont")')
 			# else:
-				# pyArgs.insert(1, 'self.makeCont(self.%s)' % methName)
+				# pyArgs.insert(1, 'self.%s' % methName)
 			
-			pyArgs.insert(1, 'self.makeCont(self.%s)' % methName)
+			pyArgs.insert(1, 'self.%s' % methName)
 			self.doCall(pyArgs, ctx)
 			[self.temp.rem(key) for key, ix in temps]
 			
@@ -461,15 +461,12 @@ class Compiler(object):
 	
 	def finish(self, pyx, ctx, needTemp):
 		if ctx.tail:
-			self.line(2, 'raise TailCall(self.get(" cont"), %s)' % pyx)
+			self.line(2, 'return self.get(" cont"), %s' % pyx)
 			return None
 		return CompInfo(pyx, needTemp)
 	
 	def doCall(self, args, ctx):
-		self.line(2, 'raise TailCall(')
-		for arg in args:
-			self.line(3, '%s,' % arg)
-		self.line(2, ')')
+		self.line(2, 'return %s' % ', '.join(args))
 	
 	def line(self, indent, s):
 		self.lines.append(indent * '\t' + s)
@@ -496,10 +493,7 @@ def compFunc(k, parent, parmList, body):
 	name, temp = _compCache[(parmList, body)]
 	cls = type(name, temp.__bases__, dict(temp.__dict__))
 	cls._parent = parent
-	raise TailCall(k, cls)
-	
-	# c = Compiler(parmList, body)
-	# raise TailCall(k, c.make())
+	return k, cls
 
 Internal.internals['compFunc'] = compFunc
 

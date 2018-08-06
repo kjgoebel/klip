@@ -6,7 +6,7 @@ class Halt(Exception):
 		self.value = value
 
 def justHalt(value):
-	raise Halt(value)
+	raise Halt(nil)
 
 class TailCallError(Exception):
 	pass
@@ -63,19 +63,19 @@ class Func(object):
 	def setLocal(self, name, value):
 		self.vars[name] = Binding(value)
 	
-	def makeCont(self, method):
-		saved = self.temps[:]
-		def cont(*args):
-			self.temps[:] = saved
-			method(*args)
-		return cont
+	def makeExplicitCont(self, method):
+		return lambda dummy, *args: method(*args)
 	
-	def makeDummyCont(self, method):
-		saved = self.temps[:]
-		def cont(dummy, *args):
-			self.temps[:] = saved
-			method(*args)
-		return cont
+	#This is not necessary, because
+	#1. Each invocation of the function is a different instance, so calling the fn surrounding the ccc can't affect the temps in the continuation, and
+	#2. The continuation won't set the temps that it's waiting for, so calling the continuation multiple times can't affect the relevant temps.
+	#1. is stupid and should be fixed.
+	# def makeExplicitCont(self, method):
+		# saved = self.temps[:]
+		# def cont(dummy, *args):
+			# self.temps[:] = saved
+			# return method(*args)
+		# return cont
 
 
 def wrap(f, k, *args):
@@ -84,13 +84,9 @@ def wrap(f, k, *args):
 		if type(f) == type:
 			f = f()
 		try:
-			f(k, *args)
-		except TailCall as e:
-			f, k, args = e.f, e.k, e.args
+			f, k, *args = f(k, *args)
 		except Halt as e:
 			return e.value
-		else:
-			raise TailCallError('There was no tail call. (%s, %s, %s)' % (f, k, args))
 
 
 internals = {
@@ -112,7 +108,6 @@ internals = {
 	# },
 	'Func' : Func,
 	'Halt' : Halt,
-	'TailCall' : TailCall,
 }
 
 

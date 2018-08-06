@@ -17,7 +17,7 @@ class TokenizeError(Exception):
 	pass
 
 
-gSingleCharTokens = {'(', ')', '{', '}', '~', '`', ',', ';', ':'}
+gSingleCharTokens = {'(', ')', '{', '}', '~', '`', ',', ';'}
 
 
 

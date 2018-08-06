@@ -36,7 +36,7 @@
 		(branch (zero? n)
 			nil
 			(branch (== n 1)
-				(_let temp (uniq)
+				(_let temp (uniq ~temp-if)
 					`(_let ,temp ,(args 0)
 						(branch ,temp ,temp)))
 				(branch (== n 2)
@@ -72,7 +72,7 @@
 		,name))
 
 (mac forever body
-	(_let temp (uniq)
+	(_let temp (uniq ~temp-forever)
 		`((rfn ,temp ()
 			;body
 			(,temp)))))
@@ -88,8 +88,8 @@
 				(_let ,temp (iterator ,seq)
 					(_let ,it (fn ((ret nil)) (,temp ,break ret))
 						(forever ;body)))))
-		(uniq)
-		(uniq)))
+		(uniq ~break)
+		(uniq ~temp-eat)))
 
 
 (mac _with (args (body))
@@ -216,7 +216,7 @@
 					;body
 					(,temp))))))
 
-(mac dowhile (cond (body))
+(mac do-while (cond (body))
 	(wuq temp
 		`(
 			(rfn ,temp ()
