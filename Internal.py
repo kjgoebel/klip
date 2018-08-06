@@ -64,11 +64,18 @@ class Func(object):
 		self.vars[name] = Binding(value)
 	
 	def makeExplicitCont(self, method):
-		saved = self.temps[:]
-		def cont(dummy, *args):
-			self.temps[:] = saved
-			return method(*args)
-		return cont
+		return lambda dummy, *args: method(*args)
+	
+	#This is not necessary, because
+	#1. Each invocation of the function is a different instance, so calling the fn surrounding the ccc can't affect the temps in the continuation, and
+	#2. The continuation won't set the temps that it's waiting for, so calling the continuation multiple times can't affect the relevant temps.
+	#1. is stupid and should be fixed.
+	# def makeExplicitCont(self, method):
+		# saved = self.temps[:]
+		# def cont(dummy, *args):
+			# self.temps[:] = saved
+			# return method(*args)
+		# return cont
 
 
 def wrap(f, k, *args):
