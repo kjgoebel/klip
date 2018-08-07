@@ -34,27 +34,27 @@ class Parser(object):
 				self.cur = None
 	
 	def parseProclitic(self, procliticName, realName):
-		fname = self.cur.fname
-		line = self.cur.line
-		self.inc('Dangling %s. %s line %d' % (procliticName, fname, line))
-		temp = self.parseTerminal()
-		return KlipList([Sym(realName), temp])
+		start = self.cur
+		self.inc('Dangling %s. %s' % (procliticName, start.complaint()))
+		return self.parseTerminal()
 	
 	def parseTerminal(self):
 		if self.cur.value == '(':
-			complaintParms = self.cur.fname, self.cur.line
-			temp = KlipList()
-			self.inc('Unmatched open parenthesis. %s line %d' % complaintParms)
+			start = self.cur
+			ret = KlipList()
+			ret.parseInfo = start
+			self.inc('Unmatched open parenthesis. %s' % start.complaint())
 			while True:
 				if self.cur.value == ')':
-					return temp
-				temp.append(self.parseTerminal())
-				self.inc('Unmatched open parenthesis. %s line %d' % complaintParms)
+					return ret
+				ret.append(self.parseTerminal())
+				self.inc('Unmatched open parenthesis. %s' % start.complaint())
 		
 		if self.cur.value == '{':
-			complaintParms = self.cur.fname, self.cur.line
+			start = self.cur
 			ret = KlipHash()
-			self.inc('Unmatched open brace. %s line %d' % complaintParms)
+			ret.parseInfo = self.cur
+			self.inc('Unmatched open brace. %s' % start.complaint())
 			while True:
 				if self.cur.value == '}':
 					return ret
@@ -62,15 +62,15 @@ class Parser(object):
 				k = self.parseTerminal()
 				if k == nil:
 					k.doRaise(ParseError, "nil can't be a key in a hash.")
-				self.inc('Unmatched open brace. %s line %d' % complaintParms)
+				self.inc('Unmatched open brace. %s' % start.complaint())
 				
 				if self.cur.value == '}':
-					raise ParseError('Key with no value in literal hash. %s line %d' % complaintParms)
+					raise ParseError('Key with no value in literal hash. %s' % start.complaint())
 				
 				v = self.parseTerminal()
 				if v == nil:
 					v.doRaise(ParseError, "hashes can't contain nil.")
-				self.inc('Unmatched open brace. %s line %d' % complaintParms)
+				self.inc('Unmatched open brace. %s' % start.complaint())
 				
 				ret[k] = v
 		
@@ -94,7 +94,9 @@ class Parser(object):
 		if f != None:
 			return f
 		
-		return Sym(self.cur.value)
+		ret = Sym(self.cur.value)
+		ret.parseInfo = self.cur
+		return ret
 	
 	def __call__(self, tokens, fname):
 		self.fname = fname
@@ -123,5 +125,5 @@ if __name__ == '__main__':
 	tree = parse(tokenize(preprocess(fin.read()), sys.argv[1]), sys.argv[1])
 	fin.close()
 	
-	print(tree)
+	print(repr(tree))
 

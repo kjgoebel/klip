@@ -1,6 +1,11 @@
 
 
-class Token(object):
+class TokenizeError(Exception):
+	pass
+
+
+
+class Node(object):
 	def __init__(self, value, fname, line):
 		self.value = value
 		self.fname = fname
@@ -11,10 +16,9 @@ class Token(object):
 	
 	def __str__(self):
 		return str(self.value)
-
-
-class TokenizeError(Exception):
-	pass
+	
+	def complaint(self):
+		return '%s line %d' % (self.fname, self.line)
 
 
 gSingleCharTokens = {'(', ')', '{', '}', '~', '`', ',', ';'}
@@ -25,7 +29,7 @@ gSingleCharTokens = {'(', ')', '{', '}', '~', '`', ',', ';'}
 class Tokenizer(object):
 	def endWord(self):
 		if self.curWord:
-			self.tokens.append(Token(self.curWord, self.fname, self.line))
+			self.tokens.append(Node(self.curWord, self.fname, self.line))
 			self.curWord = None
 	
 	def contWord(self, c):
@@ -73,7 +77,7 @@ class Tokenizer(object):
 				self.readString('"')
 			elif c in gSingleCharTokens:
 				self.endWord()
-				self.tokens.append(Token(c, self.fname, self.line))
+				self.tokens.append(Node(c, self.fname, self.line))
 			elif c.isspace():
 				self.endWord()
 			else:
