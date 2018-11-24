@@ -1,9 +1,19 @@
 import Prefix
 import Internal
+import Asm
 from Defaults import genv
+import dis
 
 class CompileError(Exception):
 	pass
+
+
+
+uniqueCounter = 0
+def getUnique():
+	global uniqueCounter
+	uniqueCounter += 1
+	return uniqueCounter
 
 
 
@@ -20,12 +30,12 @@ def macroExpand(xpr):
 		return xpr
 	return r_macroExpand(xpr, macex)
 
-
-
 #This can be turned into a dispatch dict: 'fn' : c_fn, etc.
 _specialForms = dict.fromkeys(map(lambda x: Sym(x), [
 	'branch', 'fn', 'ccc', 'quote', 'quasiquote', 'unquote', 'unquotesplicing', 'include', 'assign', 'get-safe', 'halt',
 ]))
+
+
 
 def getNodeType(xpr):
 	try:
@@ -89,30 +99,6 @@ def getParmNames(parmList):
 	return ret
 
 
-
-# def analyzeFreeVars(xpr):
-	# if hasattr(xpr, 'freeVars'):
-		# return xpr.freeVars
-	
-	# ret = set()
-	# for sub in activeChildren(xpr):
-		# ret |= analyzeFreeVars(sub)
-	
-	# nt = getNodeType(xpr)
-	
-	# if nt == 'fn':
-		# xpr.parms = getParmNames(xpr[1])
-		# ret -= xpr.parms
-	
-	# if nt == 'sym':
-		# ret.add(xpr)
-	
-	# if nt != 'datum':
-		# xpr.freeVars = ret
-	
-	# return ret
-
-
 def analyzeEnvs(xpr, env):
 	nt = getNodeType(xpr)
 	if nt == 'fn':
@@ -125,7 +111,7 @@ def analyzeEnvs(xpr, env):
 		for i, sub in enumerate(xpr[1:]):
 			for var in analyzeEnvs(sub, subenv):
 				if var in xpr.parms:
-					xpr.heritable[var] = i - 1
+					xpr.heritable[var] = i
 		
 		return xpr.inherited
 	
@@ -135,12 +121,84 @@ def analyzeEnvs(xpr, env):
 	return ret
 
 
+def analyzeContinuations(xpr, heritable = set()):
+	nt = getNodeType(xpr)
+	if nt == 'fn':
+		for i, sub in enumerate(xpr[1:]):
+			subherit = heritable | {var for var, lastIndex in xpr.heritable.items() if lastIndex >= i}
+			analyzeContinuations(sub, subherit)
+		return
+	
+	if nt == 'combination':
+		xpr.knum = getUnique()
+		xpr.kvars = heritable
+	
+	for sub in activeChildren(xpr):
+		analyzeContinuations(sub, heritable)
+
+
+def c_datum(xpr, a, waiting):
+	if waiting:
+		a.const(xpr)
+	return a
+
+def c_sym(xpr, a, waiting):
+	if waiting:
+		a.load(xpr.pyx())
+	return a
+
+
+_c_Table = {
+	'datum' : c_datum,
+	'sym' : c_sym,
+	#'combination' : c_combo,
+}
+
+
+
+def c_xpr(xpr, a, waiting):
+	nt = getNodeType(xpr)
+	
+	f = _c_Table.get(nt, None)
+	
+	if f:
+		return f(xpr, a, waiting)
+	
+	raise CompileError('not implemented %s' % nt)
+
+
+
+def compFunc(node):
+	parms = [parm.pyx() for parm in node.parms]
+	inherited = [var.pyx() for var in node.inherited]
+	heritable = [var.pyx() for var in node.heritable.keys()]
+	body = node[2:]
+	
+	a = Asm.Asm(
+		parms,
+		None,
+		inherited,
+		heritable,
+		str(node)
+	)
+	
+	aa = a
+	for xpr in body[:-1]:
+		aa = c_xpr(xpr, aa, False)
+	c_xpr(body[-1], aa, True)
+	
+	a.add('RETURN_VALUE')
+	
+	return a
+
+
+
 
 def run(xpr):
 	xpr = macroExpand(xpr)
 	analyzeNodeTypes(xpr)
-	# analyzeFreeVars(xpr)
 	analyzeEnvs(xpr, set())
+	analyzeContinuations(xpr)
 	
 	def r_show(xpr, indent = ''):
 		nt = getNodeType(xpr)
@@ -149,6 +207,10 @@ def run(xpr):
 		items = []
 		if hasattr(xpr, 'freeVars'):
 			items.append('freeVars = %s' % xpr.freeVars)
+		
+		if hasattr(xpr, 'knum'):
+			items.append('knum = %d' % xpr.knum)
+			items.append('kvars = %s' % xpr.kvars)
 		
 		if nt == 'parmlist':
 			items.append(str(xpr))
@@ -166,7 +228,14 @@ def run(xpr):
 		if isa(xpr, KlipList) and nt != 'parmlist':
 			for sub in xpr:
 				r_show(sub, indent + '\t')
-	
+		
+		# if nt == 'fn':
+			# a = compFunc(xpr)
+			# f = a.makeF('func%d' % getUnique(), globals(), None, None)
+			# dis.dis(f)
+			# print(f(2, 1))
+			# return f
+		
 	r_show(xpr)
 
 
@@ -188,6 +257,13 @@ if __name__ == '__main__':
 	
 	for xpr in tree:
 		run(xpr)
+	
+	# s = '''
+		# (fn (x y) 3 x)
+	# '''
+	# tree = parse(tokenize(preprocess(s), 'string'), 'string')
+	# print(tree)
+	# run(tree)
 
 	
 

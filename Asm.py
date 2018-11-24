@@ -87,6 +87,7 @@ class Asm(object):
 	}
 	
 	def __init__(self,
+			name,
 			parms,				#parameters, including those with default values.
 			restParm,			#the name of the rest parameter.
 			otherLocals,		#other variables local to the function, including those in heritable.
@@ -94,6 +95,7 @@ class Asm(object):
 			heritable,			#variables that a nested function will inherit.
 			doc = ''
 	):
+		self.name = name
 		self.parms = parms
 		self.restParm = restParm
 		if restParm:
@@ -192,10 +194,12 @@ class Asm(object):
 					inst.arg = labelValues[inst.arg] - 2 * i - 2
 				else:
 					inst.arg = labelValues[inst.arg]
+			if isa(inst.arg, Asm):
+				inst.arg = inst.arg.makeC()
 		
 		return b''.join([inst.make() for inst in self.instrs])
 	
-	def makeC(self, name):
+	def makeC(self):
 		return types.CodeType(
 			len(self.parms),
 			0,
@@ -207,18 +211,18 @@ class Asm(object):
 			tuple(self.names),
 			tuple(self.locals),
 			'<string>',
-			name,
+			self.name,
 			1,
 			b'',
 			tuple(self.inherited),
 			tuple(self.heritable)
 		)
 	
-	def makeF(self, name, globals, defaults, closure):
+	def makeF(self, globals, defaults, closure):
 		return types.FunctionType(
-			self.makeC(name),
+			self.makeC(),
 			globals,
-			name,
+			self.name,
 			defaults,
 			closure
 		)
@@ -238,6 +242,7 @@ if __name__ == '__main__':
 		raise Halt(value)
 	
 	wrapA = Asm(
+		'_wrap',
 		['f'],
 		'args',
 		[], [], []
@@ -265,7 +270,7 @@ if __name__ == '__main__':
 	wrapA.add('POP_TOP')
 	wrapA.add('POP_TOP')
 	
-	_wrap = wrapA.makeF('_wrap', {'print' : print}, None, None)
+	_wrap = wrapA.makeF({'print' : print}, None, None)
 	
 	def wrap(f, *args):
 		try:
@@ -309,9 +314,42 @@ if __name__ == '__main__':
 			return g, f_2, b
 		return g, f_1, a
 	
+	
+	# def g(k, temps, x):
+		# return k, temps, x + 1
+	
+	# def f_3(temps, ret):
+		# return plus, temps['k'], temps['ret_f_1'], temps['ret_f_2'], ret
+	
+	# def f_2(temps, ret):
+		# temps['ret_f_2'] = ret
+		# return g, f_3, temps, temps['c']
+	
+	# dis.dis(f_2)
+	
+	# def f_1(temps, ret):
+		# temps['ret_f_1'] = ret
+		# return g, f_2, temps, temps['b']
+	
+	# def f_0(k, a, b, c):
+		# temps = {'k' : k, 'b' : b, 'c' : c}
+		# return g, f_1, temps, a
+	
 	print(wrap(f_0, halt, 2, 3, 4))
 	
+	dis.dis(f_0)
+	
+	import time
+	def timeIt(f, n):
+		start = time.time()
+		for i in range(n):
+			f()
+		return (time.time() - start) / n
+	
+	print(timeIt(lambda: wrap(f_0, halt, 2, 3, 4), 100000))
+	
 	# gAsm = Asm(
+		# 'g',
 		# ['y'],
 		# None,
 		# [],
@@ -330,6 +368,7 @@ if __name__ == '__main__':
 	# print('max stack', gAsm.maxStack)
 	
 	# fAsm = Asm(
+		# 'f',
 		# ['x'],
 		# None,
 		# [],
@@ -353,7 +392,6 @@ if __name__ == '__main__':
 	# fAsm.add('RETURN_VALUE')
 	
 	# f = fAsm.makeF(
-		# 'f',
 		# {'print' : print},
 		# None,
 		# None
