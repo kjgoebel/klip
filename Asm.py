@@ -87,6 +87,7 @@ class Asm(object):
 	}
 	
 	def __init__(self,
+			name,
 			parms,				#parameters, including those with default values.
 			restParm,			#the name of the rest parameter.
 			otherLocals,		#other variables local to the function, including those in heritable.
@@ -94,6 +95,7 @@ class Asm(object):
 			heritable,			#variables that a nested function will inherit.
 			doc = ''
 	):
+		self.name = name
 		self.parms = parms
 		self.restParm = restParm
 		if restParm:
@@ -192,10 +194,12 @@ class Asm(object):
 					inst.arg = labelValues[inst.arg] - 2 * i - 2
 				else:
 					inst.arg = labelValues[inst.arg]
+			if isa(inst.arg, Asm):
+				inst.arg = inst.arg.makeC()
 		
 		return b''.join([inst.make() for inst in self.instrs])
 	
-	def makeC(self, name):
+	def makeC(self):
 		return types.CodeType(
 			len(self.parms),
 			0,
@@ -207,75 +211,195 @@ class Asm(object):
 			tuple(self.names),
 			tuple(self.locals),
 			'<string>',
-			name,
+			self.name,
 			1,
 			b'',
 			tuple(self.inherited),
 			tuple(self.heritable)
 		)
 	
-	def makeF(self, name, globals, defaults, closure):
+	def makeF(self, globals, defaults, closure):
 		return types.FunctionType(
-			self.makeC(name),
+			self.makeC(),
 			globals,
-			name,
+			self.name,
 			defaults,
 			closure
 		)
 
 
 if __name__ == '__main__':
-	gAsm = Asm(
-		['y'],
-		None,
-		[],
-		['x'],
-		[],
+	import Prefix
+	
+	class Halt(Exception):
+		def __init__(self, value):
+			self.value = value
+	
+	def justHalt(value):
+		raise Halt(nil)
+	
+	def halt(value):
+		raise Halt(value)
+	
+	wrapA = Asm(
+		'_wrap',
+		['f'],
+		'args',
+		[], [], []
 	)
 	
-	gAsm.load('print')
-	gAsm.load('x')
-	gAsm.load('y')
-	gAsm.add('CALL_FUNCTION', 2)
-	gAsm.add('RETURN_VALUE')
+	wrapA.load('args')
+	wrapA.load('f')
+	wrapA.label('loop_start')
+	wrapA.add('ROT_TWO')
 	
-	gCode = gAsm.makeC('g')
-	print(dis.dis(gCode))
-	print('max stack', gAsm.maxStack)
+	# wrapA.store('args')
+	# wrapA.store('f')
+	# wrapA.load('print')
+	# wrapA.load('f')
+	# wrapA.load('args')
+	# wrapA.add('CALL_FUNCTION', 2)
+	# wrapA.load('f')
+	# wrapA.load('args')
 	
-	fAsm = Asm(
-		['x'],
-		None,
-		[],
-		[],
-		['x'],
-	)
+	wrapA.add('CALL_FUNCTION_EX', 0)
+	wrapA.add('UNPACK_EX', 1)
+	wrapA.add('JUMP_ABSOLUTE', 'loop_start')
 	
-	fAsm.cell('x')
-	fAsm.add('BUILD_TUPLE', 1)
-	fAsm.const(gCode)
-	fAsm.const('f.g')
-	fAsm.add('MAKE_FUNCTION', 0x8)
-	fAsm.add('DUP_TOP')		#Note that g isn't stored anywhere. This is fine only because it's not inherited.
-	fAsm.const(5)
-	fAsm.add('CALL_FUNCTION', 1)
-	fAsm.add('POP_TOP')
-	fAsm.const(7)
-	fAsm.add('CALL_FUNCTION', 1)
-	fAsm.add('POP_TOP')
-	fAsm.const(object())
-	fAsm.add('RETURN_VALUE')
+	#This is just so the assembler doesn't complain about the non-empty stack:
+	wrapA.add('POP_TOP')
+	wrapA.add('POP_TOP')
 	
-	f = fAsm.makeF(
-		'f',
-		{'print' : print},
-		None,
-		None
-	)
-	print(dis.dis(f))
-	print('max stack', fAsm.maxStack)
+	_wrap = wrapA.makeF({'print' : print}, None, None)
 	
-	print(f(9))
+	def wrap(f, *args):
+		try:
+			_wrap(f, *args)
+		except Halt as e:
+			return e.value
+	
+	
+	def plus(k, *args):
+		return k, sum(args)
+	
+	def f_0(k, a, b, c):
+		def f_1(ret):
+			def f_2(ret):
+				return k, ret
+			return plus, f_2, ret, c
+		return plus, f_1, a, b
+	
+	print(wrap(f_0, halt, 1, 2, 3))
+	
+	
+	def f_0(k, a, b, c, d):
+		def f_1(ret_f_1):
+			def f_2(ret_f_2):
+				return plus, k, ret_f_1, ret_f_2
+			return plus, f_2, c, d
+		return plus, f_1, a, b
+	
+	print(wrap(f_0, halt, 2, 3, 4, 5))
+	
+	
+	def g(k, x):
+		return k, x + 1
+	
+	def f_0(k, a, b, c):
+		def f_1(ret_f_1):
+			def f_2(ret_f_2):
+				def f_3(ret_f_3):
+					return plus, k, ret_f_1, ret_f_2, ret_f_3
+				return g, f_3, c
+			return g, f_2, b
+		return g, f_1, a
+	
+	
+	# def g(k, temps, x):
+		# return k, temps, x + 1
+	
+	# def f_3(temps, ret):
+		# return plus, temps['k'], temps['ret_f_1'], temps['ret_f_2'], ret
+	
+	# def f_2(temps, ret):
+		# temps['ret_f_2'] = ret
+		# return g, f_3, temps, temps['c']
+	
+	# dis.dis(f_2)
+	
+	# def f_1(temps, ret):
+		# temps['ret_f_1'] = ret
+		# return g, f_2, temps, temps['b']
+	
+	# def f_0(k, a, b, c):
+		# temps = {'k' : k, 'b' : b, 'c' : c}
+		# return g, f_1, temps, a
+	
+	print(wrap(f_0, halt, 2, 3, 4))
+	
+	dis.dis(f_0)
+	
+	import time
+	def timeIt(f, n):
+		start = time.time()
+		for i in range(n):
+			f()
+		return (time.time() - start) / n
+	
+	print(timeIt(lambda: wrap(f_0, halt, 2, 3, 4), 100000))
+	
+	# gAsm = Asm(
+		# 'g',
+		# ['y'],
+		# None,
+		# [],
+		# ['x'],
+		# [],
+	# )
+	
+	# gAsm.load('print')
+	# gAsm.load('x')
+	# gAsm.load('y')
+	# gAsm.add('CALL_FUNCTION', 2)
+	# gAsm.add('RETURN_VALUE')
+	
+	# gCode = gAsm.makeC('g')
+	# print(dis.dis(gCode))
+	# print('max stack', gAsm.maxStack)
+	
+	# fAsm = Asm(
+		# 'f',
+		# ['x'],
+		# None,
+		# [],
+		# [],
+		# ['x'],
+	# )
+	
+	# fAsm.cell('x')
+	# fAsm.add('BUILD_TUPLE', 1)
+	# fAsm.const(gCode)
+	# fAsm.const('f.g')
+	# fAsm.add('MAKE_FUNCTION', 0x8)
+	# fAsm.add('DUP_TOP')		#Note that g isn't stored anywhere. This is fine only because it's not inherited.
+	# fAsm.const(5)
+	# fAsm.add('CALL_FUNCTION', 1)
+	# fAsm.add('POP_TOP')
+	# fAsm.const(7)
+	# fAsm.add('CALL_FUNCTION', 1)
+	# fAsm.add('POP_TOP')
+	# fAsm.const(object())
+	# fAsm.add('RETURN_VALUE')
+	
+	# f = fAsm.makeF(
+		# {'print' : print},
+		# None,
+		# None
+	# )
+	# print(dis.dis(f))
+	# print('max stack', fAsm.maxStack)
+	
+	# print(f(9))
 	
 	
 
