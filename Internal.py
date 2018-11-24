@@ -78,15 +78,18 @@ class Func(object):
 		# return cont
 
 
-def wrap(f, k, *args):
+def _wrap(f, *args):
 	while True:
 		#print(f, k, args)
 		if type(f) == type:
 			f = f()
-		try:
-			f, k, *args = f(k, *args)
-		except Halt as e:
-			return e.value
+		f, *args = f(*args)
+
+def wrap(f, *args):
+	try:
+		_wrap(f, *args)
+	except Halt as e:
+		return e.value
 
 
 internals = {
@@ -109,6 +112,89 @@ internals = {
 	'Func' : Func,
 	'Halt' : Halt,
 }
+
+
+if __name__ == '__main__':
+	import dis
+	
+	dis.dis(wrap)
+	
+	from Asm import Asm
+	
+	a = Asm(
+		['f'],
+		'args',
+		['e'],
+		[], [],
+	)
+	
+	a.load('args')
+	a.load('f')
+	
+	a.label('loop_start')
+	a.load('type')
+	a.add('DUP_TOP_TWO')
+	a.add('ROT_TWO')
+	a.add('CALL_FUNCTION', 1)
+	a.comp('==')
+	a.add('POP_JUMP_IF_FALSE', 'after_function_instantiation')
+	
+	a.add('CALL_FUNCTION', 0)
+	
+	a.label('after_function_instantiation')
+	
+	a.add('ROT_TWO')
+	a.add('CALL_FUNCTION_EX', 0)
+	a.add('UNPACK_EX', 1)
+	a.add('JUMP_ABSOLUTE', 'loop_start')
+	
+	
+	f = a.makeF(
+		'_wrap',
+		{'Halt' : Halt, 'type' : type, 'print' : print},
+		None,
+		None
+	)
+	
+	print()
+	dis.dis(f)
+	
+	_wrap = f
+	
+	import sys, traceback, builtins
+	from Preprocess import preprocess
+	from Tokenize import tokenize
+	from Parse import parse
+	from Compile import Compiler
+	from Defaults import genv
+	
+	for parm in sys.argv[1:]:
+		setattr(builtins, parm, True)
+	
+	fin = open(sys.argv[1], 'r')
+	tree = parse(tokenize(preprocess(fin.read()), sys.argv[1]), sys.argv[1])
+	fin.close()
+	
+	#This is dumb.
+	newTree = []
+	for xpr in tree:
+		if isa(xpr, KlipList):
+			if len(xpr) and xpr[0] == Sym('include'):
+				fin = open(xpr[1], 'r')
+				newTree += parse(tokenize(preprocess(fin.read()), xpr[1]), xpr[1])
+				fin.close()
+			else:
+				newTree.append(xpr)
+	
+	for xpr in newTree:
+		c = Compiler(KlipList(), KlipList([xpr]))			#Possibly the call to macex should go here, and macex should take care of recursion.
+		f = c.make()
+		f._parent = genv
+		
+		result = wrap(f(), justHalt)
+		if result != nil:									#This is a dumb hack to deal with the fact that we're running each toplevel expression in a separate call to wrap. The halt form actually means something now, if you pass a non-nil argument to it.
+			print(result)
+			break
 
 
 
