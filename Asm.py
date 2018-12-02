@@ -282,6 +282,15 @@ if __name__ == '__main__':
 	def plus(k, *args):
 		return k, sum(args)
 	
+	def prn(k, *args):
+		print(*args)
+		return k, nil
+	
+	def gt(k, a, b):
+		return k, t if a > b else nil
+	
+	
+	
 	def f_0(k, a, b, c):
 		def f_1(ret):
 			def f_2(ret):
@@ -347,6 +356,47 @@ if __name__ == '__main__':
 		return (time.time() - start) / n
 	
 	print(timeIt(lambda: wrap(f_0, halt, 2, 3, 4), 100000))
+	
+	
+	
+	#(fn (x y z)
+	#	(= x (+ 1 x))
+	#	(+ x y z))
+	def f_0(k, x, y, z):
+		def f_1(ret_1):
+			def f_2():
+				return plus, k, x, y, z
+			x = ret_1
+			return f_2,
+		return plus, f_1, 1, x
+	print(wrap(f_0, halt, 2, 3, 4))
+	
+	
+	#(fn (x y)
+	#	(prn x)
+	#	(prn y)
+	#	(+ x y))
+	def f_0(k, x, y):
+		def f_1(ret_1):
+			def f_2(ret_2):
+				return plus, k, x, y
+			return prn, f_2, y
+		return prn, f_1, x
+	print(wrap(f_0, halt, 1, 2))
+	
+	#(fn (x y)
+	#	(branch (> x y)
+	#		(prn x)
+	#		(prn y)))
+	def f_0(k, x, y):
+		def f_1(ret_1):
+			if klipFalse(ret_1):
+				return prn, k, y
+			else:
+				return prn, k, x
+		return gt, f_1, x, y
+	print(wrap(f_0, halt, 9, 8))
+	print(wrap(f_0, halt, 8, 9))
 	
 	# gAsm = Asm(
 		# 'g',

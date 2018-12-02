@@ -1,6 +1,7 @@
 import Prefix
 from Internal import Halt, Func, GlobalEnv		#Maybe this stuff should all be in Prefix.
 import operator, time, random
+from functools import update_wrapper
 
 
 class DefaultError(Exception):
@@ -131,7 +132,7 @@ def _binOp(name, op, allowedTypes):
 			if not type(arg) in allowedTypes:
 				raise DefaultError("Can't use operator %s on an object of type %s." % (name, type(arg)))
 		return k, op(*args)
-	genv.set(name, temp)
+	genv.set(name, update_wrapper(temp, op))
 
 def _accOp(name, op, default, allowedTypes):
 	def temp(k, *args):
@@ -141,7 +142,7 @@ def _accOp(name, op, default, allowedTypes):
 				raise DefaultError("Can't use operator %s on an object of type %s." % (name, type(arg)))
 			ret = op(ret, arg)
 		return k, ret
-	genv.set(name, temp)
+	genv.set(name, update_wrapper(temp, op))
 
 def _antiAccOp(name, op, default, allowedTypes):
 	def temp(k, *args):
@@ -161,7 +162,7 @@ def _antiAccOp(name, op, default, allowedTypes):
 		for arg in args[1:]:
 			ret = op(ret, arg)
 		return k, ret
-	genv.set(name, temp)
+	genv.set(name, update_wrapper(temp, op))
 
 def _compOp(name, op):
 	def temp(k, *args):
@@ -169,7 +170,7 @@ def _compOp(name, op):
 			if not op(args[i], args[i+1]):
 				return k, nil
 		return k, t
-	genv.set(name, temp)
+	genv.set(name, update_wrapper(temp, op))
 
 
 _numTypes = {int, float}

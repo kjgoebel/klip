@@ -2,8 +2,16 @@ import Prefix
 import Internal
 from Defaults import genv
 
+
 class CompileError(Exception):
 	pass
+
+_uniqueCounter = 0
+def nextUnique():
+	global _uniqueCounter
+	ret = _uniqueCounter
+	_uniqueCounter += 1
+	return ret
 
 
 
@@ -19,13 +27,6 @@ class CompCtx(object):
 	def derive(self, **kwargs):
 		return CompCtx(self, **kwargs)
 
-
-_uniqueCounter = 0
-def nextUnique():
-	global _uniqueCounter
-	ret = _uniqueCounter
-	_uniqueCounter += 1
-	return ret
 
 
 class Temp(object):

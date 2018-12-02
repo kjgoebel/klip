@@ -5,12 +5,13 @@ if not hasattr(builtins, '_prefix'):
 	
 	builtins.isa = isinstance
 	
-	
-	
 	import string
-	_allowed = set(string.ascii_letters + string.digits)
+	import functools
+	
 	
 	class Sym(object):
+		_allowed = set(string.ascii_letters + string.digits)
+		
 		def __init__(self, name):
 			self.name = name
 		
@@ -31,7 +32,7 @@ if not hasattr(builtins, '_prefix'):
 			return self.name != other.name
 		
 		def pyx(self):
-			return '_' + ''.join([c if c in _allowed else '_%d_' % ord(c) for c in self.name])
+			return '_' + ''.join([c if c in self._allowed else '_%d_' % ord(c) for c in self.name])
 	builtins.Sym = Sym
 	
 	nil = Sym('nil')
@@ -106,7 +107,7 @@ if not hasattr(builtins, '_prefix'):
 			self._hash = None
 			ret = getattr(cls, name)(self, *args, **kwargs)
 			return nil if ret is None else ret
-		return temp
+		return functools.update_wrapper(temp, getattr(cls, name))
 	
 	for funcName in ['clear', 'extend', 'remove']:
 		setattr(KlipList, funcName, (lambda cls = list, name = funcName: _makeWrapperFunc(cls, name))())
