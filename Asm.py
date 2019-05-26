@@ -398,6 +398,11 @@ if __name__ == '__main__':
 	print(wrap(f_0, halt, 9, 8))
 	print(wrap(f_0, halt, 8, 9))
 	
+	# (fn (x y)
+		# `(fn ,x (apply ,y ,x)))
+	def f_0(k, x, y):
+		return k, KlipList(Sym('fn'), x, KlipList(Sym('apply'), y, x))
+	
 	# gAsm = Asm(
 		# 'g',
 		# ['y'],

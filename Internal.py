@@ -8,6 +8,9 @@ class Halt(Exception):
 def justHalt(value):
 	raise Halt(nil)
 
+def doHalt(value):
+	raise Halt(value)
+
 class TailCallError(Exception):
 	pass
 

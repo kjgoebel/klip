@@ -4,15 +4,20 @@
 #macex cannot use fn forms (after the first one), because they would be 
 #compiled during execution of macex, which would make macex recursive with no 
 #stopping condition.
-(assign macex (fn (xpr (mac-func nil))
-	(branch (!= (type? xpr) ~list)
-		(halt xpr))
-	(branch (== (len xpr) 0)
-		(halt xpr))
-	(assign mac-func (*all-macros* (xpr 0)))
-	(branch mac-func
-		(macex (apply mac-func (xpr [1 t])))
-		(halt xpr))))
+(
+	(fn (inner-macex)
+		(assign macex (fn (xpr)
+			(branch (!= (type? xpr) ~list)
+				xpr
+				(branch (== (len xpr) 0)
+					xpr
+					(inner-macex xpr))))))
+	(fn (xpr (mac-func nil))
+		(assign mac-func (*all-macros* (xpr 0)))
+		(branch mac-func
+			(macex (apply mac-func (xpr [1 t])))
+			xpr)))
+
 
 (set *all-macros* ~mac (fn (name args (body))
 	`(set *all-macros* ~,name (fn ,args ;body))))
@@ -487,7 +492,7 @@
 			(or (cache args)
 				(and (no (nilcache args))
 					(let ret (apply f args)
-						(if ret
+						(if ret					#This is broken because [] and {} are both false. Maybe both no (x among nil [] {}) and not (== x nil) should exist? Argh, that adds complexity.
 							(set cache args ret)
 							(set nilcache args t))
 						ret))))))

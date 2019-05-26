@@ -448,7 +448,7 @@ class Compiler(object):
 			pass
 		else:
 			#self.comment('expanding %s' % xpr)
-			xpr = Internal.wrap(macex, Internal.justHalt, xpr)
+			xpr = Internal.wrap(macex, Internal.doHalt, xpr)
 			#self.comment('expanded to %s' % xpr)
 		
 		if dxprs:
