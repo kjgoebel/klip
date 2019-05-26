@@ -1,8 +1,8 @@
 
 (assign *all-macros* {})
 
-#macex cannot use fn forms (after the first one), because they would be 
-#compiled during execution of macex, which would make macex recursive with no 
+#macex cannot nest fn forms, because the inner fns would be compiled 
+#during execution of macex, which would make macex recursive with no 
 #stopping condition.
 (
 	(fn (inner-macex)
@@ -11,9 +11,8 @@
 				xpr
 				(branch (== (len xpr) 0)
 					xpr
-					(inner-macex xpr))))))
-	(fn (xpr (mac-func nil))
-		(assign mac-func (*all-macros* (xpr 0)))
+					(inner-macex xpr (*all-macros* (xpr 0))))))))
+	(fn (xpr mac-func)
 		(branch mac-func
 			(macex (apply mac-func (xpr [1 t])))
 			xpr)))
