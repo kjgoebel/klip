@@ -27,21 +27,19 @@
 (mac def (name args (body))
 	`(assign ,name (fn ,args ;body)))
 
-#Define a crude version of let, because we don't have the machinery for the general version yet.
-#The _ is because this macro isn't intended to be used directly.
-(mac _let (s v (body))
+(mac let (s v (body))
 	`((fn (,s) ;body) ,v))
 
 (def zero? (x)
 	(== x 0))
 
 (mac if args
-	(_let n (len args)
+	(let n (len args)
 		(branch (zero? n)
 			nil
 			(branch (== n 1)
-				(_let temp (uniq ~temp-if)
-					`(_let ,temp ,(args 0)
+				(let temp (uniq ~temp-if)
+					`(let ,temp ,(args 0)
 						(branch ,temp ,temp)))
 				(branch (== n 2)
 					`(branch ,(args 0)
@@ -55,10 +53,10 @@
 
 (assign iterators {
 	~list (fn (s)
-		(_let i 0 (fn (break (value nil))
+		(let i 0 (fn (break (value nil))
 			(if (>= i (len s))
 				(break value))
-			(_let ret (s i)
+			(let ret (s i)
 				(assign i (+ i 1))
 				ret))))
 })
@@ -70,13 +68,13 @@
 	(iterator (items s))))
 
 
-(mac rfn (name args (body))				#I don't like the fact that you have to specify a name. But I really don't like anaphora.
-	`(_let ,name nil				#This is to keep the binding of name local.
+(mac rfn (name args (body))				#I don't like the fact that you have to specify a name. But I really don't like anaphors.
+	`(let ,name nil				#This is to keep the binding of name local.
 		(assign ,name (fn ,args ;body))
 		,name))
 
 (mac forever body
-	(_let temp (uniq ~temp-forever)
+	(let temp (uniq ~temp-forever)
 		`((rfn ,temp ()
 			;body
 			(,temp)))))
@@ -89,14 +87,14 @@
 	(
 		(fn (break temp)
 			`(wcc ,break
-				(_let ,temp (iterator ,seq)
-					(_let ,it (fn ((ret nil)) (,temp ,break ret))
+				(let ,temp (iterator ,seq)
+					(let ,it (fn ((ret nil)) (,temp ,break ret))
 						(forever ;body)))))
 		(uniq ~break)
 		(uniq ~temp-eat)))
 
 
-(mac _with (args (body))
+(mac with (args (body))
 	(
 		(fn (syms vals)
 			(eat args it
@@ -112,25 +110,19 @@
 (def list? (x)
 	(== (type? x) ~list))
 
-#Finally we can define the fully general let.
-(mac let xprs
-	(if
-		(no (xprs 0))
-		`(do ;(xprs [1 t]))
-		
-		(list? (xprs 0))
-		(if (list? (xprs 0 0))
-			`(_with ,(xprs 0 0) (let ;(xprs 0 [1 t]) ;(xprs [1 t])))
-			`(_with ;xprs))
-		
-		`(_let ,(xprs 0) ,(xprs 1) ;(xprs [2 t]))))
 
+(mac collect (emit (body))
+	(
+		(fn (ret)
+			`(let ,ret [] (let ,emit (fn (val) (append ,ret val))
+				;body
+				,ret)))
+		(uniq ~ret)))
 
 (def map1 (f l)
-	(_let ret []			#So, this is the ugliest thing in consless Lisp. It's not functional code. But something like (+ [(f (l 0))] (map1 (l [1 t]))) would be slow.
+	(collect emit
 		(eat l it
-			(append ret (f (it))))
-		ret))
+			(emit (f (it))))))
 
 
 #Short for With UniQue. First arg is a symbol or a list of symbols.
@@ -142,7 +134,6 @@
 		`(
 			(fn (,(xprs 0)) ;(xprs [1 t]))
 			(uniq ~,(xprs 0)))))
-
 
 
 (assign place-table {})
@@ -183,7 +174,7 @@
 
 (mac bin= (place value)
 	(let forms (=forms place)
-		`(let (;(forms 0))
+		`(with (;(forms 0))
 			(,(forms 2) ,value)
 			,(forms 1))))
 
@@ -195,15 +186,21 @@
 
 (mac ++ (place (delta 1))
 	(let forms (=forms place)
-		`(let (;(forms 0))
+		`(with (;(forms 0))
 			(,(forms 2) (+ ,(forms 1) ,delta))
 			,(forms 1))))
 
 (mac -- (place (delta 1))
 	(let forms (=forms place)
-		`(let (;(forms 0))
+		`(with (;(forms 0))
 			(,(forms 2) (- ,(forms 1) ,delta))
 			,(forms 1))))
+
+(mac swap (x y)
+	`(= ,x ,y ,x))
+
+(mac rotate args
+	`(= ;args ,(args 0)))
 
 
 (mac iflet (s v (rest))
@@ -267,7 +264,7 @@
 	(wuq it
 		`(if
 			(eat ,seq ,it
-				(let (,x (,it) ,y (,it t))
+				(with (,x (,it) ,y (,it t))
 					;body))
 			(prn 'WARNING: eachpair invoked on a sequence with an odd number of elements.'))))
 
@@ -282,7 +279,7 @@
 #elif ... else. So all cases take the same (short) amount of time to run.
 (mac case (var (rest))
 	(wuq choice
-		(let
+		(with
 			(
 				xpdict {}
 				default (if (odd? (len rest))
@@ -309,13 +306,11 @@
 (let forfunc
 	(fn (i start stop step body)
 		(wuq (_start _stop _step op)
-			`(let
-				(
-					(,_start ,start ,_stop ,stop ,_step ,step)
-					(,op (if (<= ,_start ,_stop) < >=) ,i ,_start))			#Yup, this is why I wanted let to be as general as it is.
-				(while (,op ,i ,_stop)
-					;body
-					(++ ,i ,_step)))))
+			`(with (,_start ,start ,_stop ,stop ,_step ,step)
+				(with (,op (if (<= ,_start ,_stop) < >=) ,i ,_start)
+					(while (,op ,i ,_stop)
+						;body
+						(++ ,i ,_step))))))
 	(mac for (i r (body))
 		(if (and (list? r) (== (r 0) ~list))
 			(case (len r)
@@ -354,18 +349,29 @@
 				`(do ;body)))))
 
 
+(pluralize 2 let lets)
+(pluralize 2 with withs)
 (pluralize 2 for fors)
 (pluralize 2 forlen forlens)
 (pluralize 2 each eaches)
 (pluralize 3 eachpair eachpairs)
 
 
-(mac gen (i r (body))
+(mac hcollect (emit (body))
 	(wuq ret
-		`(let ,ret []
-			(for ,i ,r
-				(append ,ret (do ;body)))
+		`(lets
+			(
+				,ret {}
+				,emit (fn (key val) (set ,ret key val)))
+			;body
 			,ret)))
+
+
+(mac gen (i r (body))
+	(wuq emit
+		`(collect ,emit
+			(for ,i ,r
+				(,emit (do ;body))))))
 
 (pluralize 2 gen gens)
 
@@ -375,25 +381,23 @@
 (pluralize 1 nof nofs)
 
 
-
 (def join args
-	(let ret []
+	(collect emit
 		(each arg args
 			(each sub arg
-				(append ret sub)))
-		ret))
+				(emit sub)))))
 
-(let _flatten
-	(rfn self (ret arg)
-		(if (list? arg)
-			(each sub arg
-				(self ret sub))
-			(append ret arg)))
-	(def flatten args
-		(let ret []
-			(each arg args
-				(_flatten ret arg))
-			ret)))
+
+(def atom-walk (f x)
+	(if (list? x)
+		(each sub x
+			(atom-walk f sub))
+		(f x)))
+
+
+(def flatten args
+	(collect emit
+		(atom-walk emit args)))
 
 
 
@@ -413,26 +417,24 @@
 (let _map
 	(rfn self (f args groups)
 		(if groups
-			(let
-				(
-					ret []
-					rest (groups [1 t]))
-				(wcc break
-					(let
-						(
-							(group
+			(collect emit
+				(let rest (groups [1 t])
+					(wcc break
+						(lets
+							(
+								group
 								(let temp (groups 0)
-									(if (list? (temp 0)) temp [temp])))
-							(its
+									(if (list? (temp 0)) temp [temp]))
+								
+								its
 								(map1
 									(fn (seq) (iterator seq))
-									group)))
-						(forever
-							(append ret (self
-								f
-								(join (map1 (fn (it) (it break)) its) args)
-								rest)))))
-				ret)
+									group))
+							(forever
+								(emit (self
+									f
+									(join (map1 (fn (it) (it break)) its) args)
+									rest)))))))
 			(apply f args)))
 	(def map (f (groups))
 		(_map f [] groups)))
@@ -443,12 +445,12 @@
 
 (def idfn (x) x)
 
+#This is just gross.
 (def hmap (f h)
-	(let ret {}
+	(hcollect emit
 		(each pair (items h)
-			(let temp (f pair)
-				(= (ret (temp 0)) (temp 1))))
-		ret))
+			(apply emit (f pair)))))
+
 
 (def rcopy (x)
 	(typecase x
@@ -486,7 +488,7 @@
 
 #Yup. Two caches are necessary because hash values can't be nil.
 (def memo (f)
-	(let (cache {} nilcache {})
+	(with (cache {} nilcache {})
 		(fn args
 			(or (cache args)
 				(and (no (nilcache args))
@@ -510,6 +512,11 @@
 			;body
 			(- (time) ,start))))
 
+
+(def type-matcher (x)
+	(let typ (type x)
+		(fn (y)
+			(== (type x) typ))))
 
 
 
