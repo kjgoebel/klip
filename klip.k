@@ -239,18 +239,22 @@
 
 
 (mac or args
-	(if args
+	(if (no args)
+		nil
 		(wuq temp
 			`(iflet ,temp ,(args 0)
 				,temp
 				(or ;(args [1 t]))))))
 
 (mac and args
-	(if args
-		(if (> (len args) 1)
-			`(if ,(args 0) (and ;(args [1 t])))
-			(args 0))
-		t))
+	(if (no args)
+		t
+		
+		(== (len args) 1)
+		(args 0)
+		
+		`(if ,(args 0)
+			(and ;(args [1 t])))))
 
 
 #Note that these are considerably slower using the eat macro.
@@ -270,10 +274,10 @@
 
 
 (def even? (n)
-	(if (== 0 (band n 1))))
+	(== 0 (band n 1)))
 
 (def odd? (n)
-	(if (!= 0 (band n 1))))
+	(!= 0 (band n 1)))
 
 #This stores fns in a literal hash, rather than the horror of if elif elif 
 #elif ... else. So all cases take the same (short) amount of time to run.
@@ -343,10 +347,10 @@
 		(for i n
 			(append old-args [~args i]))
 		`(mac ,new (args (body))
-			(if args
+			(if (no args)
+				`(do ;body)
 				`(,~,old ;[;old-args]
-					(,~,new ,(args [,n t]) ;body))
-				`(do ;body)))))
+					(,~,new ,(args [,n t]) ;body))))))
 
 
 (pluralize 2 let lets)
@@ -416,7 +420,8 @@
 
 (let _map
 	(rfn self (f args groups)
-		(if groups
+		(if (no groups)
+			(apply f args)
 			(collect emit
 				(let rest (groups [1 t])
 					(wcc break
@@ -434,8 +439,7 @@
 								(emit (self
 									f
 									(join (map1 (fn (it) (it break)) its) args)
-									rest)))))))
-			(apply f args)))
+									rest)))))))))
 	(def map (f (groups))
 		(_map f [] groups)))
 
@@ -491,9 +495,9 @@
 	(with (cache {} nilcache {})
 		(fn args
 			(or (cache args)
-				(and (no (nilcache args))
+				(and (not (nilcache args))
 					(let ret (apply f args)
-						(if ret					#This is broken because [] and {} are both false. Maybe both no (x among nil [] {}) and not (== x nil) should exist? Argh, that adds complexity.
+						(if ret
 							(set cache args ret)
 							(set nilcache args t))
 						ret))))))

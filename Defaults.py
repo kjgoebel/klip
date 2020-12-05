@@ -10,8 +10,11 @@ class DefaultError(Exception):
 
 
 
-def _no(k, arg):
+def _not(k, arg):
 	return k, t if klipFalse(arg) else nil
+
+def _no(k, arg):
+	return k, t if len(arg) == 0 else nil
 
 def _prfunc(spacer, printNewline):
 	def temp(k, *args):
@@ -105,6 +108,7 @@ genv = GlobalEnv({
 	'nil' : nil,
 	't' : t,
 	
+	'not' : _not,
 	'no' : _no,
 	
 	#These need to be fixed.

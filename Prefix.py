@@ -181,10 +181,7 @@ if not hasattr(builtins, '_prefix'):
 	
 	
 	def klipFalse(x):
-		try:
-			return len(x) == 0
-		except TypeError:
-			return x == nil
+		return x == nil
 	builtins.klipFalse = klipFalse
 	
 	builtins.dcompile = False
