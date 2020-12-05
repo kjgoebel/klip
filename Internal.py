@@ -83,7 +83,7 @@ class Func(object):
 
 def _wrap(f, *args):
 	while True:
-		#print(f, k, args)
+		#print(f, args)
 		if type(f) == type:
 			f = f()
 		f, *args = f(*args)

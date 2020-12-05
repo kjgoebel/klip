@@ -531,6 +531,7 @@ if __name__ == '__main__':
 	
 	for xpr in newTree:
 		c = Compiler(KlipList(), KlipList([xpr]))			#Possibly the call to macex should go here, and macex should take care of recursion.
+		#print(c)
 		f = c.make()
 		f._parent = genv
 		

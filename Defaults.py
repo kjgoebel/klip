@@ -1,7 +1,8 @@
 import Prefix
 from Internal import Halt, Func, GlobalEnv		#Maybe this stuff should all be in Prefix.
-import operator, time, random
+import operator, time, random, math
 from functools import update_wrapper
+import sys
 
 
 class DefaultError(Exception):
@@ -12,9 +13,14 @@ class DefaultError(Exception):
 def _no(k, arg):
 	return k, t if klipFalse(arg) else nil
 
-def _prn(k, *args):
-	print(*args)
-	return k, nil
+def _prfunc(spacer, printNewline):
+	def temp(k, *args):
+		out = spacer.join(map(str, args))
+		sys.stdout.write(out)
+		if printNewline and not (out and out[-1] == '\n'):
+			sys.stdout.write('\n')
+		return k, nil
+	return temp
 
 def _prnr(k, *args):
 	print(*map(repr, args))
@@ -91,6 +97,9 @@ def _rand(k, *args):
 def _randf(k):
 	return k, random.random()
 
+def _sqrt(k, arg):
+	return k, math.sqrt(arg)
+
 
 genv = GlobalEnv({
 	'nil' : nil,
@@ -98,7 +107,12 @@ genv = GlobalEnv({
 	
 	'no' : _no,
 	
-	'prn' : _prn,
+	#These need to be fixed.
+	'pr' : _prfunc(' ', False),
+	'prr' : _prfunc('', False),
+	'prn' : _prfunc(' ', True),
+	'prrn' : _prfunc('', True),
+	
 	'prnr' : _prnr,
 	
 	'apply' : _apply,
@@ -121,6 +135,7 @@ genv = GlobalEnv({
 	
 	'rand' : _rand,
 	'randf' : _randf,
+	'sqrt' : _sqrt,
 })
 
 
