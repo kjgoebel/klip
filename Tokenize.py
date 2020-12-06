@@ -20,6 +20,37 @@ class TokenizeError(Exception):
 gSingleCharTokens = {'(', ')', '{', '}', '~', '`', ',', ';'}
 
 
+#This is crap.
+def _wrangleDots(tokens):
+	ret = []
+	prev = None
+	it = iter(tokens)
+	
+	def r_emitComplex(x):
+		if isa(x, list):
+			ret.append(Token('(', x[1].fname, x[1].line))		#Wrong line number, probably...
+			r_emitComplex(x[0])
+			ret.append(x[1])
+			ret.append(Token(')', x[1].fname, x[1].line))
+		elif x is None:
+			pass
+		else:
+			ret.append(x)
+	
+	try:
+		while True:
+			current = next(it)
+			while current.value == '.':
+				current = next(it)
+				prev = [prev, current]
+				current = next(it)
+			r_emitComplex(prev)
+			prev = current
+	except StopIteration:
+		r_emitComplex(prev)
+		return ret
+
+
 
 
 class Tokenizer(object):
@@ -74,6 +105,9 @@ class Tokenizer(object):
 			elif c in gSingleCharTokens:
 				self.endWord()
 				self.tokens.append(Token(c, self.fname, self.line))
+			elif c == '.' and not (self.curWord and self.curWord.isdigit()):
+				self.endWord()
+				self.tokens.append(Token(c, self.fname, self.line))
 			elif c.isspace():
 				self.endWord()
 			else:
@@ -82,7 +116,7 @@ class Tokenizer(object):
 			self.i += 1
 		self.endWord()
 		
-		return self.tokens
+		return _wrangleDots(self.tokens)
 
 tokenize = Tokenizer()
 		
